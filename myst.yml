@@ -10,9 +10,6 @@ project:
   license: BSD-3-Clause
   exclude: 
     - README.md
-  plugins:
-    - type: javascript
-      path: a11y.mjs
   toc:
     - file: index.md
 site:
