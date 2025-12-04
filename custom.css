@@ -1,7 +1,10 @@
-pre {
-  white-space: pre-wrap;       /* css-3 */
-  white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
-  white-space: -pre-wrap;      /* Opera 4-6 */
-  white-space: -o-pre-wrap;    /* Opera 7 */
-  word-wrap: break-word;       /* Internet Explorer 5.5+ */
+pre[style*="rgba(191, 85, 64, 0.1)"] {
+  /* Force text to wrap instead of running off the side */
+  white-space: pre-wrap !important;
+  
+  /* Disable the scrollbar, which removes the accessibility requirement */
+  overflow: visible !important;
+  
+  /* Optional: fix the layout if the error box is breaking boundaries */
+  max-width: 100%;
 }
