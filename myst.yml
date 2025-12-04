@@ -20,5 +20,6 @@ site:
     logo_text: Data 89 Course Notes
     hide_authors: true
     hide_myst_branding: true
+    style: custom.css
   parts:
     footer: footer.md
