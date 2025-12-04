@@ -1,38 +1,24 @@
-// accessibility.mjs
-
 const plugin = {
   name: 'Accessibility Fix',
   transforms: [
     {
-      name: 'inject-scroll-fix',
-      doc: 'Injects a client-side script to fix scrollable region focus.',
+      name: 'add-tabindex-to-code',
       stage: 'document',
       plugin: (_, utils) => (tree) => {
-        // We define the script we want to run in the browser
-        const scriptContent = `
-          document.addEventListener("DOMContentLoaded", function() {
-            // Find all pre tags (code blocks and error boxes)
-            var preTags = document.querySelectorAll("pre");
-            preTags.forEach(function(pre) {
-              // If it scrolls, make it focusable
-              if (pre.scrollWidth > pre.clientWidth) {
-                pre.setAttribute("tabindex", "0");
-                if (!pre.hasAttribute("aria-label")) {
-                    pre.setAttribute("aria-label", "Code block");
-                }
-              }
-            });
-          });
-        `;
+        // Find all 'code' nodes (which become <pre> blocks)
+        utils.selectAll('code', tree).forEach((node) => {
+          // Initialize the data/hProperties objects if they don't exist
+          node.data = node.data || {};
+          node.data.hProperties = node.data.hProperties || {};
 
-        // We wrap it in a raw HTML node
-        const scriptNode = {
-          type: 'html',
-          value: `<script>${scriptContent}</script>`
-        };
-
-        // We push this node to the end of the document
-        tree.children.push(scriptNode);
+          // Add the accessibility attribute directly to the HTML output
+          node.data.hProperties.tabindex = 0;
+          
+          // Add a label
+          if (!node.data.hProperties['aria-label']) {
+             node.data.hProperties['aria-label'] = 'Code Snippet';
+          }
+        });
       },
     },
   ],
