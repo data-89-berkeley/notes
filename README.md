@@ -34,10 +34,10 @@ These steps detail the process you should go through every time you update the t
 2. **Update:** Make any changes you wish to make. This should (likely) only consist of changes to `_myst.yml` and the files in `content/`.
     - If you added new sections or chapters, update the `toc` in `myst.yml` to ensure your changes are included.
 3. **Build and Check:** `cd` into the top level directory of this repository and run `jupyter book start` to build the book and serve it on localhost. View what the textbook looks like with any changes you've made. Make sure nothing is broken and the changes are as you want them. 
-6. **Push:**  Stage any changes you made (i.e. using `git add [file]`, `git add -u`, `git add .`, etc.), commit your changes with `git commit -m "[description]"` (please include a useful description of any changes you made), and push to the master repository with `git push origin main`. Deployment will happen automatically via GitHub Actions.
+6. **Push:**  Stage any changes you made (i.e. using `git add [file]`, `git add -u`, `git add .`, etc.), commit your changes with `git commit -m "[description]"` (please include a useful description of any changes you made), and push to the repository with `git push origin main`. Deployment will happen automatically via GitHub Actions.
 
 ### Deployment
-The textbook is hosted on GitHub Pages and deployed automatically everytime you push to the master branch via [this workflow](https://github.com/prob140/textbook/actions/workflows/deploy.yml).
+The textbook is hosted on GitHub Pages and deployed automatically everytime you push to the main branch via [this workflow](https://github.com/data-89-berkeley/notes/actions/workflows/deploy.yml).
 
 ## Notes
 The [Jupyter Book](https://jupyterbook.org/stable/) website has lots of information about Jupyter Book. This textbook uses Jupyter Book v2 built on [MyST](https://mystmd.org/).
