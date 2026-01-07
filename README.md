@@ -9,3 +9,4 @@ To build the site locally, create a Python virtual environment, install the depe
 ```bash
 jupyter book start
 ```
+small edit
