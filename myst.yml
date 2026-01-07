@@ -11,7 +11,7 @@ project:
   exclude: 
     - README.md
   toc:
-    - file: index.md
+    - file: content/index.md
 site:
   template: book-theme
   options:
