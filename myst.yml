@@ -14,7 +14,7 @@ project:
     - file: content/index.md
     - title: Chapters
       children:
-        - file: content/Chapter_01/00_Chapter_Overview.ipynb
+        - file: content/Chapter_01/00_Probability_Fundamentals.ipynb
           children:
             - file: content/Chapter_01/01_Outcomes_and_Events_as_Sets.ipynb
             - file: content/Chapter_01/02_Probability_as_Proportion.ipynb
