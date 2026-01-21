@@ -21,6 +21,7 @@ project:
             - file: content/Chapter_01/03_The_Rules_of_Chance.ipynb
             - file: content/Chapter_01/04_Joint_and_Marginal_Probability.ipynb
             - file: content/Chapter_01/05_Conditional_Probability.ipynb
+            - file: content/Chapter_01/06_Independent_Events.ipynb
 site:
   template: book-theme
   options:
