@@ -19,6 +19,7 @@ project:
             - file: content/Chapter_01/01_Outcomes_and_Events_as_Sets.ipynb
             - file: content/Chapter_01/02_Probability_as_Proportion.ipynb
             - file: content/Chapter_01/03_The_Rules_of_Chance.ipynb
+            - file: content/Chapter_01/04_Joint_and_Marginal_Probability.ipynb
 site:
   template: book-theme
   options:
