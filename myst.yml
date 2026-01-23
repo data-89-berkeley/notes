@@ -23,6 +23,7 @@ project:
             - file: content/Chapter_01/05_Conditional_Probability.ipynb
             - file: content/Chapter_01/06_Independent_Events.ipynb
             - file: content/Chapter_01/07_Chapter_Summary.ipynb
+        - file: content/Chapter_02/00_Models_of_Chance.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
