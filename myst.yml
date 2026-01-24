@@ -25,7 +25,7 @@ project:
             - file: content/Chapter_01/07_Chapter_Summary.ipynb
         - file: content/Chapter_02/00_Models_of_Chance.ipynb
           children:
-            - file: content/Chapter_02/02_Random_Variables_and_Distributions.ipynb
+            - file: content/Chapter_02/01_Random_Variables_and_Distributions.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
