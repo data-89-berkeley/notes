@@ -17,7 +17,7 @@ project:
   exclude: 
     - README.md
   toc:
-    - file: content/index.md
+    - file: content/index.ipynb
     - title: Chapters
       children:
         - file: content/Chapter_01/00_Probability_Fundamentals.ipynb
