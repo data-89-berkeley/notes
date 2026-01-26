@@ -58,5 +58,5 @@ For example, Section 12.4 Exercise 3 of the [Stat 88 Textbook](https://github.co
 2. The link referencing Section 12.2 is created like so:
 ```
 **3.** 
-Refer to the regression of active pulse rate on resting pulse rate in [Section 12.2](ch12.2). Here are the estimated values again, along with some additional data.
+Refer to the regression of active pulse rate on resting pulse rate in [Section 12.2](#ch12.2). Here are the estimated values again, along with some additional data.
 ```
