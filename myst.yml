@@ -47,5 +47,6 @@ site:
     logo_text: Data 89 Course Notes
     hide_authors: true
     hide_myst_branding: true
+    hide_outline: true
   parts:
     footer: footer.md
