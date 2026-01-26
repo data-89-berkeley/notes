@@ -27,6 +27,8 @@ project:
           children:
             - file: content/Chapter_02/01_Random_Variables_and_Distributions.ipynb
             - file: content/Chapter_02/02_Discrete_Models.ipynb
+            - file: content/Chapter_02/03_Continuous_Models.ipynb
+            - file: content/Chapter_02/04_Probability_Densities.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
