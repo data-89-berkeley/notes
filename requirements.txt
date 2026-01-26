@@ -1,1 +1,9 @@
-jupyterbook>=2
+numpy
+matplotlib
+pandas
+scipy
+ipykernel
+notebook
+ipywidgets
+plotly
+ipython

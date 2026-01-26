@@ -8,6 +8,12 @@ project:
     - name: Alex Strang
   github: data-89-berkeley/notes
   license: BSD-3-Clause
+  jupyter:
+    binder:
+      repo: data-89-berkeley/notes
+      ref: main
+      url: https://mybinder.org
+    kernelName: python3
   exclude: 
     - README.md
   toc:
