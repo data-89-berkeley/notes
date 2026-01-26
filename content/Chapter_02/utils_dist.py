@@ -935,7 +935,13 @@ class DistributionProbabilityVisualization:
             # Set default axis ranges for blank plot
             fig.update_xaxes(title_text="x", range=[-5, 5])
             fig.update_yaxes(title_text="Density", range=[0, 1])
-            fig.update_layout(height=600, showlegend=True, title="Histogram of Samples and PDF/PMF")
+            fig.update_layout(
+                height=500,  # Slightly reduced height to make room for controls
+                showlegend=True, 
+                title="Histogram of Samples and PDF/PMF",
+                autosize=True,
+                width=None  # Let it be responsive to full container width
+            )
             fig.show()
             
             # Reset probability label
@@ -1236,7 +1242,13 @@ class DistributionProbabilityVisualization:
             # Update layout (single plot)
             fig.update_xaxes(title_text="x")
             fig.update_yaxes(title_text="Density")
-            fig.update_layout(height=600, showlegend=True, title="Histogram of Samples and PDF/PMF")
+            fig.update_layout(
+                height=500,  # Slightly reduced height to make room for controls
+                showlegend=True, 
+                title="Histogram of Samples and PDF/PMF",
+                autosize=True,
+                width=None  # Let it be responsive to full container width
+            )
             
             # Compute probabilities (only if prob_type is not empty)
             if prob_type == "":
@@ -1277,7 +1289,7 @@ class DistributionProbabilityVisualization:
         # Show blank plot initially
         self._show_blank_plot()
         
-        # Create main layout
+        # Create main layout - vertical stack: controls at top, plot below
         controls = widgets.VBox([
             self.category_dropdown,
             self.dist_dropdown,
@@ -1288,7 +1300,34 @@ class DistributionProbabilityVisualization:
             self.prob_controls_container  # Probability controls (initially hidden, includes show_pdf_button)
         ])
         
-        display(widgets.HBox([controls, self.plot_output]))
+        # Set layout constraints for vertical layout - ensure full width
+        controls.layout = widgets.Layout(
+            width='100%', 
+            max_width='100%',
+            padding='10px',
+            border='1px solid #ddd',
+            margin='5px 0'
+        )
+        self.plot_output.layout = widgets.Layout(
+            width='100%',
+            max_width='100%', 
+            padding='10px',
+            border='1px solid #ddd',
+            margin='5px 0'
+        )
+        
+        # Vertical layout: controls on top, plot below - force vertical stacking
+        main_layout = widgets.VBox(
+            [controls, self.plot_output],
+            layout=widgets.Layout(
+                width='100%',
+                max_width='100%',
+                display='flex',
+                flex_flow='column nowrap',
+                align_items='stretch'
+            )
+        )
+        display(main_layout)
 
 
 def run_distribution_explorer(distribution=None):
