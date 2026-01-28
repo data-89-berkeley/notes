@@ -45,8 +45,8 @@ site:
     favicon: favicon.png
     logo: logo.png
     logo_text: Data 89 Course Notes
-    hide_authors: true
+    hide_authors: false
     hide_myst_branding: true
-    hide_outline: true
+    hide_outline: false
   parts:
     footer: footer.md
