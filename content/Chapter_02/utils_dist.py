@@ -1353,3 +1353,636 @@ def run_distribution_explorer(distribution=None):
     viz = DistributionProbabilityVisualization(distribution=distribution)
     viz.display()
     return viz
+
+
+class PdfCdfConversionExplorer:
+    """
+    Interactive explorer to connect PDF/PMF <-> CDF.
+
+    Features:
+    - Choose Discrete/Continuous, then distribution + parameters.
+    - Choose to display PDF/PMF or CDF in the top plot.
+    - Always show a second (initially empty) plot for "saved points" and reveals.
+    - PDF/PMF mode: slider sets upper bound, shows area under curve, save -> adds CDF point, reveal CDF.
+    - CDF mode:
+        - Discrete: slider picks k, computes jump F(k)-F(k-1), highlights bars, save -> adds PMF point, reveal PMF.
+        - Continuous: slider picks x, computes slope (PDF), shows tangent, save -> adds PDF point, reveal PDF.
+    """
+
+    def __init__(self):
+        self.plot_top = widgets.Output()
+        self.plot_bottom = widgets.Output()
+        self.info = widgets.HTML(value="")
+
+        # State
+        self._saved_points = []  # list[tuple[float,float]]; meaning depends on mode
+        self._revealed = False
+
+        # Distribution options (match week_2 widgets)
+        self.continuous_dists = ["Uniform", "Exponential", "Pareto", "Beta", "Gamma", "Normal"]
+        self.discrete_dists = ["Bernoulli", "Geometric", "Binomial", "Poisson", "Hypergeometric"]
+
+        self._create_widgets()
+        self._setup_callbacks()
+        self._reset_state_and_redraw()
+
+    # -------------------------
+    # Distribution helpers
+    # -------------------------
+    def _get_params_dict(self):
+        dist = self.dist_dropdown.value
+        params = {}
+        if dist in self.param_widgets:
+            ws = self.param_widgets[dist]
+            if dist == "Uniform":
+                params["low"] = ws[0].value
+                params["high"] = ws[1].value
+            elif dist == "Exponential":
+                params["scale"] = ws[0].value
+            elif dist == "Pareto":
+                params["shape"] = ws[0].value
+                params["scale"] = ws[1].value
+            elif dist == "Beta":
+                params["alpha"] = ws[0].value
+                params["beta"] = ws[1].value
+            elif dist == "Gamma":
+                params["shape"] = ws[0].value
+                params["scale"] = ws[1].value
+            elif dist == "Normal":
+                params["mean"] = ws[0].value
+                params["std"] = ws[1].value
+            elif dist == "Bernoulli":
+                params["p"] = ws[0].value
+            elif dist == "Geometric":
+                params["p"] = ws[0].value
+            elif dist == "Binomial":
+                params["n"] = ws[0].value
+                params["p"] = ws[1].value
+            elif dist == "Poisson":
+                params["lam"] = ws[0].value
+            elif dist == "Hypergeometric":
+                params["ngood"] = ws[0].value
+                params["nbad"] = ws[1].value
+                params["nsample"] = ws[2].value
+        return params
+
+    def _make_dist(self):
+        cat = self.category_dropdown.value
+        dist = self.dist_dropdown.value
+        p = self._get_params_dict()
+
+        if cat == "Continuous":
+            if dist == "Uniform":
+                low, high = p.get("low", 0.0), p.get("high", 1.0)
+                if high <= low:
+                    high = low + 1.0
+                return stats.uniform(loc=low, scale=high - low)
+            if dist == "Exponential":
+                return stats.expon(scale=max(p.get("scale", 1.0), 1e-6))
+            if dist == "Pareto":
+                shape = max(p.get("shape", 2.0), 1e-6)
+                scale = max(p.get("scale", 1.0), 1e-6)
+                return stats.pareto(shape, loc=0, scale=scale)
+            if dist == "Beta":
+                return stats.beta(max(p.get("alpha", 2.0), 1e-6), max(p.get("beta", 2.0), 1e-6))
+            if dist == "Gamma":
+                return stats.gamma(max(p.get("shape", 2.0), 1e-6), scale=max(p.get("scale", 1.0), 1e-6))
+            if dist == "Normal":
+                return stats.norm(loc=p.get("mean", 0.0), scale=max(p.get("std", 1.0), 1e-6))
+            return stats.norm()
+
+        # Discrete
+        if dist == "Bernoulli":
+            return stats.bernoulli(p=max(min(p.get("p", 0.5), 0.999), 0.001))
+        if dist == "Geometric":
+            return stats.geom(p=max(min(p.get("p", 0.5), 0.999), 0.001))
+        if dist == "Binomial":
+            n = int(max(p.get("n", 10), 1))
+            pp = max(min(p.get("p", 0.5), 0.999), 0.001)
+            return stats.binom(n, pp)
+        if dist == "Poisson":
+            return stats.poisson(mu=max(p.get("lam", 2.0), 1e-6))
+        if dist == "Hypergeometric":
+            ng = int(max(p.get("ngood", 10), 1))
+            nb = int(max(p.get("nbad", 10), 1))
+            ns = int(max(p.get("nsample", 10), 1))
+            ns = min(ns, ng + nb)
+            return stats.hypergeom(ng + nb, ng, ns)
+        return stats.bernoulli(0.5)
+
+    def _get_x_grid(self, dist_obj):
+        cat = self.category_dropdown.value
+        dist_name = self.dist_dropdown.value
+        p = self._get_params_dict()
+
+        if cat == "Discrete":
+            # Use support if finite; otherwise use quantiles.
+            a, b = dist_obj.support()
+            if np.isfinite(a) and np.isfinite(b):
+                k_min, k_max = int(a), int(b)
+            else:
+                # Conservative quantiles to capture most mass
+                k_min = int(np.floor(dist_obj.ppf(0.001)))
+                k_max = int(np.ceil(dist_obj.ppf(0.999)))
+                if not np.isfinite(k_min):
+                    k_min = 0
+                if not np.isfinite(k_max):
+                    k_max = k_min + 25
+            # Fix common discrete supports
+            if dist_name == "Bernoulli":
+                k_min, k_max = 0, 1
+            if dist_name == "Geometric":
+                k_min = max(k_min, 1)
+            if dist_name == "Binomial":
+                k_min, k_max = 0, int(p.get("n", 10))
+            k_max = max(k_max, k_min + 1)
+            return np.arange(k_min, k_max + 1, 1, dtype=int)
+
+        # Continuous
+        a, b = dist_obj.support()
+        if np.isfinite(a) and np.isfinite(b):
+            x_min, x_max = float(a), float(b)
+        else:
+            # Use quantiles; fall back for pathological params.
+            q_lo = dist_obj.ppf(0.001)
+            q_hi = dist_obj.ppf(0.999)
+            if np.isfinite(q_lo) and np.isfinite(q_hi) and q_hi > q_lo:
+                x_min, x_max = float(q_lo), float(q_hi)
+            else:
+                # Sensible fallbacks
+                if dist_name == "Normal":
+                    mean, std = p.get("mean", 0.0), max(p.get("std", 1.0), 1e-6)
+                    x_min, x_max = mean - 4 * std, mean + 4 * std
+                elif dist_name in {"Exponential", "Gamma"}:
+                    x_min, x_max = 0.0, 10.0
+                elif dist_name == "Pareto":
+                    x_min, x_max = float(max(p.get("scale", 1.0), 1e-6)), float(max(p.get("scale", 1.0), 1e-6)) + 10.0
+                else:
+                    x_min, x_max = -5.0, 5.0
+        if not np.isfinite(x_min):
+            x_min = -5.0
+        if not np.isfinite(x_max):
+            x_max = x_min + 10.0
+        if x_max <= x_min:
+            x_max = x_min + 1.0
+        pad = 0.05 * (x_max - x_min)
+        x_min, x_max = x_min - pad, x_max + pad
+        return np.linspace(x_min, x_max, 500)
+
+    # -------------------------
+    # UI
+    # -------------------------
+    def _create_widgets(self):
+        self.category_dropdown = widgets.Dropdown(
+            options=["Discrete", "Continuous"],
+            value="Discrete",
+            description="Type:",
+            style={"description_width": "initial"},
+        )
+
+        self.dist_dropdown = widgets.Dropdown(
+            options=self.discrete_dists,
+            value="Bernoulli",
+            description="Distribution:",
+            style={"description_width": "initial"},
+        )
+
+        self.view_toggle = widgets.ToggleButtons(
+            options=[("Show PDF", "pdf"), ("Show CDF", "cdf")],
+            value="pdf",
+            description="View:",
+            style={"description_width": "initial"},
+        )
+
+        # Param widgets (subset aligned with week_2)
+        self.param_widgets = {}
+        self.param_widgets["Normal"] = [
+            widgets.FloatSlider(value=0, min=-5, max=5, step=0.1, description="Mean:", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=1, min=0.1, max=3, step=0.1, description="Std:", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Exponential"] = [
+            widgets.FloatSlider(value=1, min=0.1, max=5, step=0.1, description="Scale:", style={"description_width": "initial"})
+        ]
+        self.param_widgets["Beta"] = [
+            widgets.FloatSlider(value=2, min=0.5, max=10, step=0.1, description="Alpha:", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=2, min=0.5, max=10, step=0.1, description="Beta:", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Gamma"] = [
+            widgets.FloatSlider(value=2, min=0.5, max=10, step=0.1, description="Shape:", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=1, min=0.1, max=5, step=0.1, description="Scale:", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Uniform"] = [
+            widgets.FloatSlider(value=0, min=-5, max=5, step=0.1, description="Low:", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=1, min=-5, max=5, step=0.1, description="High:", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Pareto"] = [
+            widgets.FloatSlider(value=2.0, min=0.1, max=5, step=0.1, description="Shape (α):", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=1.0, min=0.1, max=5, step=0.1, description="Scale (xₘ):", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Poisson"] = [
+            widgets.FloatSlider(value=2, min=0.5, max=20, step=0.1, description="Lambda:", style={"description_width": "initial"})
+        ]
+        self.param_widgets["Binomial"] = [
+            widgets.IntSlider(value=10, min=1, max=50, step=1, description="n:", style={"description_width": "initial"}),
+            widgets.FloatSlider(value=0.5, min=0.1, max=0.9, step=0.05, description="p:", style={"description_width": "initial"}),
+        ]
+        self.param_widgets["Bernoulli"] = [
+            widgets.FloatSlider(value=0.5, min=0.1, max=0.9, step=0.05, description="p:", style={"description_width": "initial"})
+        ]
+        self.param_widgets["Geometric"] = [
+            widgets.FloatSlider(value=0.5, min=0.1, max=0.9, step=0.05, description="p:", style={"description_width": "initial"})
+        ]
+        self.param_widgets["Hypergeometric"] = [
+            widgets.IntSlider(value=10, min=1, max=50, step=1, description="ngood:", style={"description_width": "initial"}),
+            widgets.IntSlider(value=10, min=1, max=50, step=1, description="nbad:", style={"description_width": "initial"}),
+            widgets.IntSlider(value=10, min=1, max=50, step=1, description="nsample:", style={"description_width": "initial"}),
+        ]
+
+        self.param_container = widgets.VBox([])
+
+        self.bound_slider = widgets.FloatSlider(
+            value=0.0,
+            min=-5.0,
+            max=5.0,
+            step=0.1,
+            description="Upper bound:",
+            style={"description_width": "initial"},
+        )
+
+        self.save_button = widgets.Button(description="Save Value", button_style="success")
+        self.reveal_button = widgets.Button(description="Reveal", button_style="info")
+        self.reset_button = widgets.Button(description="Reset saved points", button_style="warning")
+
+        self.controls = widgets.VBox(
+            [
+                self.category_dropdown,
+                self.dist_dropdown,
+                self.param_container,
+                self.view_toggle,
+                self.bound_slider,
+                widgets.HBox([self.save_button, self.reveal_button, self.reset_button]),
+                self.info,
+            ],
+            layout=widgets.Layout(width="100%", padding="10px", border="1px solid #ddd"),
+        )
+
+    def _setup_callbacks(self):
+        self.category_dropdown.observe(self._on_category_change, names="value")
+        self.dist_dropdown.observe(self._on_dist_change, names="value")
+        self.view_toggle.observe(self._on_view_change, names="value")
+
+        for ws in self.param_widgets.values():
+            for w in ws:
+                w.observe(self._on_params_change, names="value")
+
+        self.bound_slider.observe(self._on_bound_change, names="value")
+        self.save_button.on_click(self._on_save)
+        self.reveal_button.on_click(self._on_reveal)
+        self.reset_button.on_click(self._on_reset_points)
+
+    # -------------------------
+    # Event handlers
+    # -------------------------
+    def _on_category_change(self, change):
+        if change["new"] == "Continuous":
+            self.dist_dropdown.options = self.continuous_dists
+            self.dist_dropdown.value = "Uniform"
+        else:
+            self.dist_dropdown.options = self.discrete_dists
+            self.dist_dropdown.value = "Bernoulli"
+        self._reset_state_and_redraw()
+
+    def _on_dist_change(self, change):
+        self._reset_state_and_redraw()
+
+    def _on_view_change(self, change):
+        self._reset_state_and_redraw(reset_saved=False)
+
+    def _on_params_change(self, change):
+        self._reset_state_and_redraw()
+
+    def _on_bound_change(self, change):
+        self._redraw()
+
+    def _on_reset_points(self, button):
+        self._saved_points = []
+        self._revealed = False
+        self._redraw()
+
+    def _on_save(self, button):
+        dist_obj = self._make_dist()
+        x_grid = self._get_x_grid(dist_obj)
+        cat = self.category_dropdown.value
+        view = self.view_toggle.value
+
+        if cat == "Discrete":
+            x0 = int(np.round(self.bound_slider.value))
+        else:
+            x0 = float(self.bound_slider.value)
+
+        if view == "pdf":
+            # Save point on CDF: (x0, F(x0))
+            y = float(dist_obj.cdf(x0))
+            self._saved_points.append((x0, y))
+        else:
+            if cat == "Discrete":
+                # Save point on PMF: (k, F(k)-F(k-1))
+                Fk = float(dist_obj.cdf(x0))
+                Fprev = float(dist_obj.cdf(x0 - 1))
+                self._saved_points.append((x0, max(0.0, min(1.0, Fk - Fprev))))
+            else:
+                # Save point on PDF: (x, slope = f(x))
+                self._saved_points.append((x0, float(dist_obj.pdf(x0))))
+
+        self._redraw()
+
+    def _on_reveal(self, button):
+        self._revealed = True
+        self._redraw()
+
+    # -------------------------
+    # Rendering
+    # -------------------------
+    def _update_param_container(self):
+        dist = self.dist_dropdown.value
+        self.param_container.children = tuple(self.param_widgets.get(dist, []))
+
+    def _update_bound_slider_range(self):
+        dist_obj = self._make_dist()
+        x_grid = self._get_x_grid(dist_obj)
+        cat = self.category_dropdown.value
+        view = self.view_toggle.value
+
+        if cat == "Discrete":
+            self.bound_slider.step = 1
+            self.bound_slider.min = int(np.min(x_grid))
+            self.bound_slider.max = int(np.max(x_grid))
+            # Keep value within range
+            self.bound_slider.value = int(np.clip(int(np.round(self.bound_slider.value)), self.bound_slider.min, self.bound_slider.max))
+            self.bound_slider.description = "k:"
+        else:
+            self.bound_slider.step = (float(np.max(x_grid)) - float(np.min(x_grid))) / 200.0
+            self.bound_slider.step = max(self.bound_slider.step, 1e-3)
+            self.bound_slider.min = float(np.min(x_grid))
+            self.bound_slider.max = float(np.max(x_grid))
+            self.bound_slider.value = float(np.clip(float(self.bound_slider.value), self.bound_slider.min, self.bound_slider.max))
+            self.bound_slider.description = "Upper bound:" if view == "pdf" else "x:"
+
+    def _update_buttons(self):
+        cat = self.category_dropdown.value
+        view = self.view_toggle.value
+        if view == "pdf":
+            self.save_button.description = "Save Value"
+            self.reveal_button.description = "Reveal CDF"
+        else:
+            self.save_button.description = "Save Point"
+            self.reveal_button.description = "Reveal PMF" if cat == "Discrete" else "Reveal PDF"
+
+    def _reset_state_and_redraw(self, reset_saved=True):
+        self._update_param_container()
+        self._update_buttons()
+        if reset_saved:
+            self._saved_points = []
+            self._revealed = False
+        self._update_bound_slider_range()
+        self._redraw()
+
+    def _render_empty_bottom(self, title, x_label, y_label):
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
+            height=350,
+            margin=dict(l=40, r=20, t=40, b=40),
+        )
+        fig.update_xaxes(title_text=x_label)
+        fig.update_yaxes(title_text=y_label)
+        return fig
+
+    def _redraw(self):
+        dist_obj = self._make_dist()
+        x_grid = self._get_x_grid(dist_obj)
+        cat = self.category_dropdown.value
+        dist_name = self.dist_dropdown.value
+        view = self.view_toggle.value
+
+        if cat == "Discrete":
+            x0 = int(np.round(self.bound_slider.value))
+        else:
+            x0 = float(self.bound_slider.value)
+
+        # --- TOP plot ---
+        with self.plot_top:
+            clear_output(wait=True)
+            fig = go.Figure()
+
+            if view == "pdf":
+                if cat == "Discrete":
+                    pmf = dist_obj.pmf(x_grid)
+                    colors = ["rgba(220, 20, 60, 0.75)" if int(k) <= x0 else "rgba(70, 130, 180, 0.65)" for k in x_grid]
+                    fig.add_trace(
+                        go.Bar(
+                            x=x_grid,
+                            y=pmf,
+                            marker=dict(color=colors, line=dict(color="navy", width=1)),
+                            name="PMF",
+                        )
+                    )
+                    area = float(dist_obj.cdf(x0))
+                    self.info.value = f"<b>Area under PMF up to</b> k={x0}: <b>{area:.4f}</b> (this equals the CDF at k)"
+                    fig.update_layout(title=f"{dist_name} PMF (shaded sum up to k)")
+                    fig.update_xaxes(title_text="k")
+                    fig.update_yaxes(title_text="PMF")
+                else:
+                    pdf = dist_obj.pdf(x_grid)
+                    fig.add_trace(go.Scatter(x=x_grid, y=pdf, mode="lines", line=dict(color="orange", width=3), name="PDF"))
+                    mask = x_grid <= x0
+                    if np.any(mask):
+                        fig.add_trace(
+                            go.Scatter(
+                                x=np.concatenate([[x_grid[mask][0]], x_grid[mask], [x_grid[mask][-1]]]),
+                                y=np.concatenate([[0.0], pdf[mask], [0.0]]),
+                                fill="tozeroy",
+                                mode="lines",
+                                line=dict(color="rgba(255,0,0,0.25)"),
+                                fillcolor="rgba(255,0,0,0.25)",
+                                name="Area",
+                                showlegend=False,
+                            )
+                        )
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x0, x0],
+                            y=[0, float(np.max(pdf)) * 1.05 if len(pdf) else 1.0],
+                            mode="lines",
+                            line=dict(color="red", width=2, dash="dash"),
+                            showlegend=False,
+                        )
+                    )
+                    area = float(dist_obj.cdf(x0))
+                    self.info.value = f"<b>Area under PDF up to</b> x={x0:.4g}: <b>{area:.4f}</b> (this equals the CDF at x)"
+                    fig.update_layout(title=f"{dist_name} PDF (shaded area up to upper bound)")
+                    fig.update_xaxes(title_text="x")
+                    fig.update_yaxes(title_text="PDF")
+
+            else:
+                # view == "cdf"
+                if cat == "Discrete":
+                    cdf = dist_obj.cdf(x_grid)
+                    # Compute jump size at k = x0
+                    Fk = float(dist_obj.cdf(x0))
+                    Fprev = float(dist_obj.cdf(x0 - 1))
+                    diff = max(0.0, min(1.0, Fk - Fprev))
+                    self.info.value = (
+                        f"<b>Jump size (PMF) at</b> k={x0}: "
+                        f"F({x0})-F({x0-1}) = <b>{diff:.4f}</b>"
+                    )
+
+                    colors = []
+                    for k in x_grid:
+                        if int(k) in {x0, x0 - 1}:
+                            colors.append("rgba(255, 165, 0, 0.85)")
+                        else:
+                            colors.append("rgba(100, 149, 237, 0.55)")
+
+                    fig.add_trace(
+                        go.Bar(
+                            x=x_grid,
+                            y=cdf,
+                            marker=dict(color=colors, line=dict(color="navy", width=1)),
+                            name="CDF bars",
+                        )
+                    )
+                    # Vertical segment showing the jump between adjacent bars
+                    x_mid = x0 - 0.5
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x_mid, x_mid],
+                            y=[Fprev, Fk],
+                            mode="lines",
+                            line=dict(color="orange", width=6),
+                            name="Jump",
+                            showlegend=False,
+                        )
+                    )
+                    fig.update_layout(title=f"{dist_name} CDF (bar view + jump size)")
+                    fig.update_xaxes(title_text="k")
+                    fig.update_yaxes(title_text="CDF", range=[0, 1.02])
+                else:
+                    cdf = dist_obj.cdf(x_grid)
+                    fig.add_trace(go.Scatter(x=x_grid, y=cdf, mode="lines", line=dict(color="royalblue", width=3), name="CDF"))
+
+                    # "Compute slope": derivative of CDF is PDF
+                    slope = float(dist_obj.pdf(x0))
+                    Fx = float(dist_obj.cdf(x0))
+                    self.info.value = f"<b>Slope at</b> x={x0:.4g}: <b>{slope:.4f}</b> (this equals the PDF value)"
+
+                    dx = 0.08 * (float(np.max(x_grid)) - float(np.min(x_grid)))
+                    x1 = max(float(np.min(x_grid)), x0 - dx)
+                    x2 = min(float(np.max(x_grid)), x0 + dx)
+                    y1 = Fx + slope * (x1 - x0)
+                    y2 = Fx + slope * (x2 - x0)
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x1, x2],
+                            y=[y1, y2],
+                            mode="lines",
+                            line=dict(color="orange", width=4),
+                            name="Tangent",
+                            showlegend=False,
+                        )
+                    )
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x0],
+                            y=[Fx],
+                            mode="markers",
+                            marker=dict(color="black", size=10),
+                            showlegend=False,
+                        )
+                    )
+                    fig.update_layout(title=f"{dist_name} CDF (with tangent line at x)")
+                    fig.update_xaxes(title_text="x")
+                    fig.update_yaxes(title_text="CDF", range=[0, 1.02])
+
+            fig.update_layout(height=420, margin=dict(l=40, r=20, t=50, b=40))
+            fig.show()
+
+        # --- BOTTOM plot ---
+        with self.plot_bottom:
+            clear_output(wait=True)
+            fig2 = go.Figure()
+
+            if view == "pdf":
+                # Bottom collects CDF points and can reveal full CDF.
+                fig2 = self._render_empty_bottom(title="Saved points (CDF)", x_label=("k" if cat == "Discrete" else "x"), y_label="CDF")
+                if self._revealed:
+                    if cat == "Discrete":
+                        cdf = dist_obj.cdf(x_grid)
+                        fig2.add_trace(
+                            go.Scatter(
+                                x=x_grid,
+                                y=cdf,
+                                mode="lines+markers",
+                                line_shape="hv",
+                                line=dict(color="royalblue", width=2),
+                                marker=dict(size=5),
+                                name="CDF",
+                            )
+                        )
+                    else:
+                        cdf = dist_obj.cdf(x_grid)
+                        fig2.add_trace(go.Scatter(x=x_grid, y=cdf, mode="lines", line=dict(color="royalblue", width=3), name="CDF"))
+                if self._saved_points:
+                    xs, ys = zip(*self._saved_points)
+                    fig2.add_trace(
+                        go.Scatter(
+                            x=list(xs),
+                            y=list(ys),
+                            mode="markers",
+                            marker=dict(color="crimson", size=10, symbol="circle"),
+                            name="Saved CDF points",
+                        )
+                    )
+                fig2.update_yaxes(range=[0, 1.02])
+
+            else:
+                # Bottom collects recovered PDF/PMF points and can reveal the true PDF/PMF.
+                y_label = "PMF" if cat == "Discrete" else "PDF"
+                fig2 = self._render_empty_bottom(title=f"Saved points ({y_label})", x_label=("k" if cat == "Discrete" else "x"), y_label=y_label)
+
+                if self._revealed:
+                    if cat == "Discrete":
+                        pmf = dist_obj.pmf(x_grid)
+                        fig2.add_trace(go.Bar(x=x_grid, y=pmf, marker=dict(color="rgba(70,130,180,0.6)"), name="PMF"))
+                    else:
+                        pdf = dist_obj.pdf(x_grid)
+                        fig2.add_trace(go.Scatter(x=x_grid, y=pdf, mode="lines", line=dict(color="orange", width=3), name="PDF"))
+
+                if self._saved_points:
+                    xs, ys = zip(*self._saved_points)
+                    fig2.add_trace(
+                        go.Scatter(
+                            x=list(xs),
+                            y=list(ys),
+                            mode="markers",
+                            marker=dict(color="crimson", size=10, symbol="circle"),
+                            name="Saved points",
+                        )
+                    )
+
+            fig2.show()
+
+    def display(self):
+        main = widgets.VBox(
+            [self.controls, self.plot_top, self.plot_bottom],
+            layout=widgets.Layout(width="100%", max_width="100%"),
+        )
+        display(main)
+
+
+def run_pdf_cdf_explorer():
+    """Notebook entry point for the PDF/PMF <-> CDF explorer."""
+    viz = PdfCdfConversionExplorer()
+    viz.display()
+    return viz
