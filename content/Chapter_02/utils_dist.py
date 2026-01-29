@@ -1535,14 +1535,14 @@ class PdfCdfConversionExplorer:
     def _create_widgets(self):
         self.category_dropdown = widgets.Dropdown(
             options=["Discrete", "Continuous"],
-            value="Discrete",
+            value="Continuous",
             description="Type:",
             style={"description_width": "initial"},
         )
 
         self.dist_dropdown = widgets.Dropdown(
-            options=self.discrete_dists,
-            value="Bernoulli",
+            options=self.continuous_dists,
+            value="Uniform",
             description="Distribution:",
             style={"description_width": "initial"},
         )
@@ -1719,7 +1719,7 @@ class PdfCdfConversionExplorer:
             self.bound_slider.max = int(np.max(x_grid))
             # Keep value within range
             self.bound_slider.value = int(np.clip(int(np.round(self.bound_slider.value)), self.bound_slider.min, self.bound_slider.max))
-            self.bound_slider.description = "k:"
+            self.bound_slider.description = "x:"
         else:
             self.bound_slider.step = (float(np.max(x_grid)) - float(np.min(x_grid))) / 200.0
             self.bound_slider.step = max(self.bound_slider.step, 1e-3)
@@ -1749,6 +1749,7 @@ class PdfCdfConversionExplorer:
 
     def _render_empty_bottom(self, title, x_label, y_label):
         fig = go.Figure()
+        # Use same l/r margins as top plot so x-axes align when legend is inside
         fig.update_layout(
             title=title,
             height=350,
@@ -1769,6 +1770,13 @@ class PdfCdfConversionExplorer:
             x0 = int(np.round(self.bound_slider.value))
         else:
             x0 = float(self.bound_slider.value)
+
+        # Shared x-axis range so top and bottom plots align (saved dots line up with threshold)
+        x_lo = float(np.min(x_grid))
+        x_hi = float(np.max(x_grid))
+        if cat == "Discrete":
+            x_lo -= 0.5
+            x_hi += 0.5
 
         # --- TOP plot ---
         with self.plot_top:
@@ -1905,7 +1913,18 @@ class PdfCdfConversionExplorer:
                     fig.update_xaxes(title_text="x")
                     fig.update_yaxes(title_text="CDF", range=[0, 1.02])
 
-            fig.update_layout(height=420, margin=dict(l=40, r=20, t=50, b=40))
+            fig.update_layout(
+                height=420,
+                margin=dict(l=40, r=20, t=50, b=40),
+                legend=dict(
+                    x=0.99,
+                    y=0.99,
+                    xanchor="right",
+                    yanchor="top",
+                    bgcolor="rgba(255,255,255,0.9)",
+                ),
+            )
+            fig.update_xaxes(range=[x_lo, x_hi])
             fig.show()
 
         # --- BOTTOM plot ---
@@ -1971,6 +1990,16 @@ class PdfCdfConversionExplorer:
                         )
                     )
 
+            fig2.update_layout(
+                legend=dict(
+                    x=0.99,
+                    y=0.99,
+                    xanchor="right",
+                    yanchor="top",
+                    bgcolor="rgba(255,255,255,0.9)",
+                ),
+            )
+            fig2.update_xaxes(range=[x_lo, x_hi])
             fig2.show()
 
     def display(self):
