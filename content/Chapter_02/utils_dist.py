@@ -260,6 +260,7 @@ class DistributionProbabilityVisualization:
         self.samples = np.array([])
         self.plot_output = widgets.Output()
         self.show_pdf_flag = False  # Track whether PDF should be shown
+        self.show_samples_flag = True  # Track whether sampled histogram should be shown
         self.show_shaded_region_flag = False  # Track whether shaded region should be shown
         self.bounds_interacted = False  # Track whether user has interacted with bounds
         
@@ -408,6 +409,13 @@ class DistributionProbabilityVisualization:
             disabled=True  # Disabled until samples are drawn
         )
         
+        # Show/Hide Samples button (disabled initially; controls histogram visibility)
+        self.show_samples_button = widgets.Button(
+            description="Hide Samples",
+            button_style='success',  # Green to distinguish from blue PDF/PMF button
+            disabled=True  # Disabled until samples are drawn
+        )
+        
         # Show Shaded Region button (disabled initially)
         self.show_shaded_region_button = widgets.Button(
             description="Display Shaded Region",
@@ -457,7 +465,7 @@ class DistributionProbabilityVisualization:
             widgets.HTML("<hr>"),
             self.prob_type_dropdown,
             self.slider_container,  # Dynamic slider container
-            widgets.HBox([self.show_pdf_button]),  # Only PDF button (shaded region is automatic)
+            widgets.HBox([self.show_pdf_button, self.show_samples_button]),  # PDF and Samples toggle
             widgets.HTML("<hr>"),
             self.prob_label
         ])
@@ -475,6 +483,7 @@ class DistributionProbabilityVisualization:
         self.draw_button.on_click(self._on_draw_clicked)
         self.reset_button.on_click(self._on_reset_clicked)
         self.show_pdf_button.on_click(self._on_show_pdf_clicked)
+        self.show_samples_button.on_click(self._on_show_samples_clicked)
         self.show_shaded_region_button.on_click(self._on_show_shaded_region_clicked)
         
         # Update plot when sliders change (but only if samples exist)
@@ -516,6 +525,9 @@ class DistributionProbabilityVisualization:
         self.show_pdf_flag = False
         self.show_pdf_button.disabled = True
         self.show_pdf_button.description = "Show PDF/PMF"
+        self.show_samples_flag = True
+        self.show_samples_button.disabled = True
+        self.show_samples_button.description = "Hide Samples"
         self.show_shaded_region_flag = False
         self.show_shaded_region_button.disabled = True
         self.show_shaded_region_button.description = "Display Shaded Region"
@@ -537,6 +549,9 @@ class DistributionProbabilityVisualization:
         self.show_pdf_flag = False
         self.show_pdf_button.disabled = True
         self.show_pdf_button.description = "Show PDF/PMF"
+        self.show_samples_flag = True
+        self.show_samples_button.disabled = True
+        self.show_samples_button.description = "Hide Samples"
         self.show_shaded_region_flag = False
         self.show_shaded_region_button.disabled = True
         self.show_shaded_region_button.description = "Display Shaded Region"
@@ -560,6 +575,11 @@ class DistributionProbabilityVisualization:
         self.show_pdf_flag = False
         self.show_pdf_button.disabled = True
         self.show_pdf_button.description = "Show PDF/PMF"
+        
+        # Reset samples visibility flag and button
+        self.show_samples_flag = True
+        self.show_samples_button.disabled = True
+        self.show_samples_button.description = "Hide Samples"
         
         # Reset shaded region flag and button
         self.show_shaded_region_flag = False
@@ -589,6 +609,16 @@ class DistributionProbabilityVisualization:
                 self.show_pdf_button.description = "Hide PDF/PMF"
             else:
                 self.show_pdf_button.description = "Show PDF/PMF"
+            self._update_plot()
+    
+    def _on_show_samples_clicked(self, button):
+        """Handle Show/Hide Samples button click - toggles sampled histogram visibility"""
+        if len(self.samples) > 0:
+            self.show_samples_flag = not self.show_samples_flag
+            if self.show_samples_flag:
+                self.show_samples_button.description = "Hide Samples"
+            else:
+                self.show_samples_button.description = "Show Samples"
             self._update_plot()
     
     def _on_show_shaded_region_clicked(self, button):
@@ -689,10 +719,13 @@ class DistributionProbabilityVisualization:
                     self._update_bound_sliders(reset_to_full_range=True)
                 else:
                     self._update_bound_sliders()
-                # Enable the Show PDF/PMF button
+                # Enable the Show PDF/PMF and Show/Hide Samples buttons
                 self.show_pdf_button.disabled = False
                 self.show_pdf_flag = False  # Reset to not showing PDF initially
                 self.show_pdf_button.description = "Show PDF/PMF"
+                self.show_samples_button.disabled = False
+                self.show_samples_flag = True  # Show histogram by default
+                self.show_samples_button.description = "Hide Samples"
                 # Automatically show shaded region if prob_type is selected
                 if self.prob_type_dropdown.value != "":
                     self.show_shaded_region_flag = True
@@ -955,6 +988,7 @@ class DistributionProbabilityVisualization:
         
         # Use instance flags for display options
         show_pdf = self.show_pdf_flag
+        show_samples = self.show_samples_flag
         show_shaded_region = self.show_shaded_region_flag
             
         with self.plot_output:
@@ -986,8 +1020,8 @@ class DistributionProbabilityVisualization:
             if show_pdf:
                 pdf_pmf_values = compute_pdf_pmf(x_range, dist_type, dist_category, **params)
             
-            # Create histogram first (as base layer)
-            if len(self.samples) > 0:
+            # Create histogram first (as base layer) when samples are shown
+            if len(self.samples) > 0 and show_samples:
                 if dist_category == "Discrete":
                     # For discrete, use integer bins
                     unique_vals, counts = np.unique(self.samples, return_counts=True)
@@ -1164,9 +1198,9 @@ class DistributionProbabilityVisualization:
                     else:
                         shade_y = None
                 
-                # Calculate max y value for vertical lines (from both histogram and PDF/PMF)
+                # Calculate max y value for vertical lines (from histogram and/or PDF/PMF)
                 max_hist = 0
-                if len(self.samples) > 0:
+                if len(self.samples) > 0 and show_samples:
                     if dist_category == "Discrete":
                         unique_vals, hist_counts = np.unique(self.samples, return_counts=True)
                         hist_counts = hist_counts / len(self.samples)
