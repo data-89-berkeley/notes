@@ -1323,7 +1323,7 @@ class DistributionProbabilityVisualization:
         # Show blank plot initially
         self._show_blank_plot()
         
-        # Create main layout - vertical stack: controls at top, plot below
+        # Create main layout: (1) select distribution, (2) see plot, (3) compute (Find prob + Estimated prob below)
         controls = widgets.VBox([
             self.category_dropdown,
             self.dist_dropdown,
@@ -1331,7 +1331,6 @@ class DistributionProbabilityVisualization:
             self.n_samples_slider,
             widgets.HBox([self.draw_button, self.reset_button]),  # Buttons side by side
             self.status_html,  # Status display for animation progress
-            self.prob_controls_container  # Probability controls (initially hidden, includes show_pdf_button)
         ])
         
         # Set layout constraints for vertical layout - ensure full width
@@ -1349,10 +1348,18 @@ class DistributionProbabilityVisualization:
             border='1px solid #ddd',
             margin='5px 0'
         )
+        self.prob_controls_container.layout = widgets.Layout(
+            width='100%',
+            max_width='100%',
+            padding='10px',
+            border='1px solid #ddd',
+            margin='5px 0',
+            display='none'  # shown when user has drawn samples
+        )
         
-        # Vertical layout: controls on top, plot below - force vertical stacking
+        # Vertical layout: select → plot → Find probability / Estimated probability panes
         main_layout = widgets.VBox(
-            [controls, self.plot_output],
+            [controls, self.plot_output, self.prob_controls_container],
             layout=widgets.Layout(
                 width='100%',
                 max_width='100%',
