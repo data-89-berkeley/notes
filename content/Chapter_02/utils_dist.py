@@ -2051,8 +2051,8 @@ class PdfCdfConversionExplorer:
         display(main)
 
 
-def run_pdf_cdf_explorer(distribution=None):
+def run_pdf_cdf_explorer():
     """Notebook entry point for the PDF/PMF <-> CDF explorer."""
-    viz = PdfCdfConversionExplorer(distribution=distribution)
+    viz = PdfCdfConversionExplorer()
     viz.display()
     return viz
