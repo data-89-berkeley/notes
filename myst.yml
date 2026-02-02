@@ -36,6 +36,11 @@ project:
             - file: content/Chapter_02/03_Continuous_Models.ipynb
             - file: content/Chapter_02/04_Probability_Densities.ipynb
             - file: content/Chapter_02/05_Chapter_Summary.ipynb
+        - file: content/Chapter_03/00_Visualizing_Functions_and_Models.ipynb
+          children:
+            - file: content/Chapter_03/01_Global_Function_Properties.ipynb
+            - file: content/Chapter_03/02_Function_Operations.ipynb
+            - file: content/Chapter_03/04_Chapter_Summary.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
