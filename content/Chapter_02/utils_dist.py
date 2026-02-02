@@ -1410,7 +1410,7 @@ class PdfCdfConversionExplorer:
         - Continuous: slider picks x, computes slope (PDF), shows tangent, save -> adds PDF point, reveal PDF.
     """
 
-    def __init__(self):
+    def __init__(self, dist=None, show=None):
         self.plot_top = widgets.Output()
         self.plot_bottom = widgets.Output()
         self.info = widgets.HTML(value="")
@@ -1422,6 +1422,29 @@ class PdfCdfConversionExplorer:
         # Distribution options (match week_2 widgets)
         self.continuous_dists = ["Uniform", "Exponential", "Pareto", "Beta", "Gamma", "Normal"]
         self.discrete_dists = ["Bernoulli", "Geometric", "Binomial", "Poisson", "Hypergeometric"]
+
+        # Lock to a single distribution or view for textbook use
+        self.locked_distribution = dist
+        if show is not None:
+            show_upper = str(show).strip().upper()
+            if show_upper == "PDF":
+                self.locked_show = "pdf"
+            elif show_upper == "CDF":
+                self.locked_show = "cdf"
+            else:
+                raise ValueError(
+                    f"Invalid show: '{show}'. Valid options are: 'PDF', 'CDF'."
+                )
+        else:
+            self.locked_show = None
+
+        if self.locked_distribution is not None:
+            all_dists = self.discrete_dists + self.continuous_dists
+            if self.locked_distribution not in all_dists:
+                raise ValueError(
+                    f"Invalid dist: '{self.locked_distribution}'. "
+                    f"Valid options are: {all_dists}"
+                )
 
         self._create_widgets()
         self._setup_callbacks()
@@ -1560,6 +1583,11 @@ class PdfCdfConversionExplorer:
                     x_min, x_max = float(max(p.get("scale", 1.0), 1e-6)), float(max(p.get("scale", 1.0), 1e-6)) + 10.0
                 else:
                     x_min, x_max = -5.0, 5.0
+        # Pareto: lock upper x so axis doesn't shift when x_m (scale) changes
+        if dist_name == "Pareto":
+            scale = float(max(p.get("scale", 1.0), 1e-6))
+            x_min = scale
+            x_max = 20.0
         if not np.isfinite(x_min):
             x_min = -5.0
         if not np.isfinite(x_max):
@@ -1574,25 +1602,55 @@ class PdfCdfConversionExplorer:
     # UI
     # -------------------------
     def _create_widgets(self):
+        # Category and distribution: lock to one dist if dist= is set
+        if self.locked_distribution is not None:
+            if self.locked_distribution in self.discrete_dists:
+                initial_category = "Discrete"
+                dist_options = [self.locked_distribution]
+            else:
+                initial_category = "Continuous"
+                dist_options = [self.locked_distribution]
+            category_options = [initial_category]
+            initial_dist = self.locked_distribution
+        else:
+            initial_category = "Continuous"
+            initial_dist = "Uniform"
+            category_options = ["Discrete", "Continuous"]
+            dist_options = self.continuous_dists
+
         self.category_dropdown = widgets.Dropdown(
-            options=["Discrete", "Continuous"],
-            value="Continuous",
+            options=category_options,
+            value=initial_category,
             description="Type:",
             style={"description_width": "initial"},
+            disabled=self.locked_distribution is not None,
         )
 
         self.dist_dropdown = widgets.Dropdown(
-            options=self.continuous_dists,
-            value="Uniform",
+            options=dist_options,
+            value=initial_dist,
             description="Distribution:",
             style={"description_width": "initial"},
+            disabled=self.locked_distribution is not None,
         )
 
+        # View: lock to PDF or CDF if show= is set
+        if self.locked_show == "pdf":
+            view_options = [("Show PDF", "pdf")]
+            view_value = "pdf"
+        elif self.locked_show == "cdf":
+            view_options = [("Show CDF", "cdf")]
+            view_value = "cdf"
+        else:
+            view_options = [("Show PDF", "pdf"), ("Show CDF", "cdf")]
+            view_value = "pdf"
+
         self.view_toggle = widgets.ToggleButtons(
-            options=[("Show PDF", "pdf"), ("Show CDF", "cdf")],
-            value="pdf",
+            options=view_options,
+            value=view_value,
             description="View:",
             style={"description_width": "initial"},
+            disabled=self.locked_show is not None,
         )
 
         # Param widgets (subset aligned with week_2)
@@ -1697,7 +1755,8 @@ class PdfCdfConversionExplorer:
         self._reset_state_and_redraw()
 
     def _on_view_change(self, change):
-        self._reset_state_and_redraw(reset_saved=False)
+        # Clear both plots and reset saved/revealed so no old information from the other view
+        self._reset_state_and_redraw(reset_saved=True)
 
     def _on_params_change(self, change):
         self._reset_state_and_redraw()
@@ -2030,6 +2089,15 @@ class PdfCdfConversionExplorer:
                             name="Saved points",
                         )
                     )
+                # Lock y-axis to [0, 1.1*max(PDF or PMF)] in CDF-first mode
+                if cat == "Discrete":
+                    pmf_vals = dist_obj.pmf(x_grid)
+                    y_max = 1.1 * float(np.max(pmf_vals)) if len(pmf_vals) else 1.1
+                else:
+                    pdf_vals = dist_obj.pdf(x_grid)
+                    y_max = 1.1 * float(np.max(pdf_vals)) if len(pdf_vals) else 1.1
+                y_max = max(y_max, 0.01)
+                fig2.update_yaxes(range=[0, y_max])
 
             fig2.update_layout(
                 legend=dict(
@@ -2051,8 +2119,28 @@ class PdfCdfConversionExplorer:
         display(main)
 
 
-def run_pdf_cdf_explorer():
-    """Notebook entry point for the PDF/PMF <-> CDF explorer."""
-    viz = PdfCdfConversionExplorer()
+def run_pdf_cdf_explorer(dist=None, show=None):
+    """
+    Notebook entry point for the PDF/PMF <-> CDF explorer.
+
+    Parameters
+    ----------
+    dist : str, optional
+        If provided, locks the visualization to only this distribution.
+        Valid values:
+        - Discrete: "Bernoulli", "Geometric", "Binomial", "Poisson", "Hypergeometric"
+        - Continuous: "Uniform", "Exponential", "Pareto", "Beta", "Gamma", "Normal"
+    show : str, optional
+        If provided, locks the view to only "PDF" or only "CDF".
+        Valid values: "PDF", "CDF"
+
+    Examples
+    --------
+    >>> run_pdf_cdf_explorer()  # All distributions and views available
+    >>> run_pdf_cdf_explorer(dist="Poisson")  # Only Poisson distribution
+    >>> run_pdf_cdf_explorer(show="CDF")  # Only "Show CDF" view
+    >>> run_pdf_cdf_explorer(dist="Pareto", show="CDF")  # Pareto, CDF only
+    """
+    viz = PdfCdfConversionExplorer(dist=dist, show=show)
     viz.display()
     return viz
