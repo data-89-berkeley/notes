@@ -40,6 +40,7 @@ project:
           children:
             - file: content/Chapter_03/01_Global_Function_Properties.ipynb
             - file: content/Chapter_03/02_Function_Operations.ipynb
+            - file: content/Chapter_03/03_Local_Function_Properties.ipynb
             - file: content/Chapter_03/04_Chapter_Summary.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
