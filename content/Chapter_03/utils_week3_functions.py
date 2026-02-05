@@ -20,7 +20,7 @@ from IPython.display import display, clear_output
 # Shared function definitions
 # =============================================================================
 
-FUNCTION_TYPES = ["Linear", "Quadratic", "Cubic", "Power", "Root", "Exponential", "Logarithm"]
+FUNCTION_TYPES = ["Linear", "Quadratic", "Cubic", "Power", "Root", "Exponential", "Logarithm", "Bump (Normal)"]
 
 # Monotonic function types for the inverse demo
 MONOTONIC_FUNCTION_TYPES = ["Linear", "Power", "Root", "Exponential", "Logarithm"]
@@ -129,17 +129,18 @@ def get_function_definition(func_type, a, b, c, h_shift, v_shift, h_scale, v_sca
         is_nonnegative = (v_shift >= 0) and (v_scale >= 0)
         
     elif func_type == "Root":
-        # f(x) = x^(1/a) = a-th root (defined for x >= 0)
+        # f(x) = x^(1/a) = a-th root (defined for x >= 0); enforce a >= 2 so not identity/ReLU
+        root_val = max(a, 2)
         def base_func(x):
-            return np.power(np.maximum(x, 0), 1/a)
+            return np.power(np.maximum(x, 0), 1/root_val)
         def func(x):
             t = (x - h_shift) / h_scale
             return v_scale * base_func(t) + v_shift
         
-        if a != 0:
+        if root_val != 0:
             def inverse_func(y):
                 inner = (y - v_shift) / v_scale
-                return h_scale * np.power(np.maximum(inner, 0), a) + h_shift
+                return h_scale * np.power(np.maximum(inner, 0), root_val) + h_shift
             is_monotonic = True
         else:
             inverse_func = None
@@ -148,7 +149,7 @@ def get_function_definition(func_type, a, b, c, h_shift, v_shift, h_scale, v_sca
         domain = (0, 10)
         is_symmetric = False
         is_convex = False
-        is_concave = (a > 0) and (v_scale > 0)
+        is_concave = (root_val > 0) and (v_scale > 0)
         is_nonnegative = (v_shift >= 0) and (v_scale >= 0)
         
     elif func_type == "Exponential":
@@ -202,6 +203,23 @@ def get_function_definition(func_type, a, b, c, h_shift, v_shift, h_scale, v_sca
         is_concave = (a * v_scale > 0)
         is_nonnegative = False
     
+    elif func_type == "Bump (Normal)":
+        # f(x) = a * exp(-((x - b)^2) / (2*c^2)); a=height, b=center, c=width
+        c_safe = max(c, 0.2)
+        def base_func(x):
+            return a * np.exp(-((x - b) ** 2) / (2 * c_safe ** 2))
+        def func(x):
+            t = (x - h_shift) / h_scale
+            return v_scale * base_func(t) + v_shift
+        
+        inverse_func = None
+        domain = (-5, 5)
+        is_monotonic = False
+        is_symmetric = True  # about x = b
+        is_convex = False
+        is_concave = (a * v_scale > 0)
+        is_nonnegative = (a >= 0) and (v_scale >= 0) and (v_shift >= 0)
+    
     else:
         raise ValueError(f"Unknown function type: {func_type}")
     
@@ -238,11 +256,11 @@ def create_simple_function(func_type, a, b, c):
         label = f"x^{a:.1f}"
         
     elif func_type == "Root":
-        root_val = max(a, 1)
+        root_val = max(a, 2)  # enforce >= 2 so not identity/ReLU
         def func(x):
             return np.power(np.maximum(x, 0), 1/root_val)
         domain = (0, 10)
-        label = f"x^(1/{root_val:.0f})"
+        label = f"x^(1/{root_val:.2g})"
         
     elif func_type == "Exponential":
         base = max(b, 0.1)
@@ -259,6 +277,13 @@ def create_simple_function(func_type, a, b, c):
             return a * np.log(np.maximum(x, 1e-10)) / np.log(base)
         domain = (0.01, 10)
         label = f"{a:.1f}·log_{base:.1f}(x)"
+    
+    elif func_type == "Bump (Normal)":
+        c_safe = max(c, 0.2)
+        def func(x):
+            return a * np.exp(-((x - b) ** 2) / (2 * c_safe ** 2))
+        domain = (-5, 5)
+        label = f"{a:.1f}·exp(-(x-{b:.1f})²/(2·{c_safe:.1f}²))"
     else:
         raise ValueError(f"Unknown function type: {func_type}")
     
@@ -333,7 +358,8 @@ def _get_transformed_formula_string(func_type, a, b, c, h_shift, v_shift, h_scal
     elif func_type == "Power":
         base_expr = f"({x_inner})^{a:.2g}"
     elif func_type == "Root":
-        base_expr = f"({x_inner})^(1/{a:.0f})"
+        root_val = max(a, 2)
+        base_expr = f"({x_inner})^(1/{root_val:.2g})"
     elif func_type == "Exponential":
         base = max(b, 0.1)
         base_expr = f"{a:.2g}·{base:.2g}^({x_inner})"
@@ -342,6 +368,9 @@ def _get_transformed_formula_string(func_type, a, b, c, h_shift, v_shift, h_scal
         if base == 1:
             base = 2
         base_expr = f"{a:.2g}·log_{base:.2g}({x_inner})"
+    elif func_type == "Bump (Normal)":
+        c_safe = max(c, 0.2)
+        base_expr = f"{a:.2g}·exp(-({x_inner}-{b:.2g})²/(2·{c_safe:.2g}²))"
     else:
         base_expr = "?"
     
@@ -410,8 +439,8 @@ def _update_param_visibility_shared(func_type, param_a, param_b, param_c, param_
         if param_description:
             param_description.value = '<b>f(x) = x<sup>1/a</sup> = ᵃ√x</b> (x ≥ 0)'
         param_a.description = 'a (root):'
-        param_a.min, param_a.max = 1, 10
-        if param_a.value < 1:
+        param_a.min, param_a.max = 2, 10
+        if param_a.value < 2:
             param_a.value = 2
         param_b.layout.visibility = 'hidden'
         param_c.layout.visibility = 'hidden'
@@ -439,6 +468,20 @@ def _update_param_visibility_shared(func_type, param_a, param_b, param_c, param_
             param_b.value = 2
         param_b.layout.visibility = 'visible'
         param_c.layout.visibility = 'hidden'
+    
+    elif func_type == "Bump (Normal)":
+        if param_description:
+            param_description.value = '<b>f(x) = a·exp(-(x-b)²/(2c²))</b>'
+        param_a.description = 'a (height):'
+        param_b.description = 'b (center):'
+        param_c.description = 'c (width):'
+        param_a.min, param_a.max = 0.1, 2
+        param_b.min, param_b.max = -3, 3
+        param_c.min, param_c.max = 0.2, 5
+        if param_c.value < 0.2:
+            param_c.value = 1
+        param_b.layout.visibility = 'visible'
+        param_c.layout.visibility = 'visible'
 
 
 # =============================================================================
@@ -729,6 +772,26 @@ class FunctionPropertiesVisualization:
             plot_x_min, plot_x_max = -10, 10
             plot_y_min, plot_y_max = -10, 10
             
+            # Grid locked to original scale (stretches/compresses with h_scale, v_scale)
+            t_values = np.arange(-10, 11, 2)  # original x: -10, -8, ..., 10
+            raw_values = np.arange(-10, 11, 2)  # original y: -10, -8, ..., 10
+            for t in t_values:
+                x_line = h_scale * t + h_shift
+                if plot_x_min <= x_line <= plot_x_max:
+                    fig.add_trace(go.Scatter(
+                        x=[x_line, x_line], y=[plot_y_min, plot_y_max],
+                        mode='lines', line=dict(color='lightgray', width=0.5),
+                        showlegend=False
+                    ))
+            for raw in raw_values:
+                y_line = v_scale * raw + v_shift
+                if plot_y_min <= y_line <= plot_y_max:
+                    fig.add_trace(go.Scatter(
+                        x=[plot_x_min, plot_x_max], y=[y_line, y_line],
+                        mode='lines', line=dict(color='lightgray', width=0.5),
+                        showlegend=False
+                    ))
+            
             x = np.linspace(max(x_min, plot_x_min), min(x_max, plot_x_max), 1000)
             
             with np.errstate(all='ignore'):
@@ -818,7 +881,9 @@ class FunctionInverseVisualization:
     def __init__(self):
         self.plot_output = widgets.Output()
         self.function_types = MONOTONIC_FUNCTION_TYPES
-        self.show_inverse = False  # Don't show inverse by default
+        self.show_inverse = False  # Show inverse at cursor (box + point) when True
+        self.show_inverse_curve = False  # Full f^{-1} curve only after "Reveal Function"
+        self.saved_inverse_points = []  # List of (inv_x, inv_y) = (f(x), x)
         
         self._create_widgets()
         self._setup_callbacks()
@@ -834,16 +899,16 @@ class FunctionInverseVisualization:
             style={'description_width': 'initial'}
         )
         
-        # Function-specific parameters
+        # Function-specific parameters (Linear default a=2, b=1 so f != f^{-1})
         self.param_a = widgets.FloatSlider(
-            value=1, min=-5, max=5, step=0.1,
+            value=2, min=-5, max=5, step=0.1,
             description='a:',
             style={'description_width': 'initial'},
             layout=widgets.Layout(width='300px')
         )
         
         self.param_b = widgets.FloatSlider(
-            value=0, min=-5, max=5, step=0.1,
+            value=1, min=-5, max=5, step=0.1,
             description='b:',
             style={'description_width': 'initial'},
             layout=widgets.Layout(width='300px')
@@ -899,12 +964,24 @@ class FunctionInverseVisualization:
             layout=widgets.Layout(width='300px')
         )
         
-        # Show inverse toggle
+        # Calculate inverse at cursor (reflection box)
         self.inverse_button = widgets.ToggleButton(
             value=False,
-            description='Show Inverse',
+            description='Calculate Inverse',
             button_style='info',
             layout=widgets.Layout(width='150px')
+        )
+        
+        # Save point and Reveal Function (parallel to Composition)
+        self.save_point_button = widgets.Button(
+            description="Save point",
+            button_style='success',
+            layout=widgets.Layout(width='120px')
+        )
+        self.reveal_inverse_button = widgets.Button(
+            description="Reveal Function",
+            button_style='info',
+            layout=widgets.Layout(width='130px')
         )
         
         # Reset button
@@ -917,6 +994,11 @@ class FunctionInverseVisualization:
         # Cursor info display
         self.cursor_info = widgets.HTML(
             value='<div style="padding: 5px; font-family: monospace;"></div>'
+        )
+        
+        # Optional status for inverse construction
+        self.inverse_status_html = widgets.HTML(
+            value='<div style="padding: 4px; font-size: 12px; color: #666;"></div>'
         )
         
         # Formula display (above the plot)
@@ -933,6 +1015,8 @@ class FunctionInverseVisualization:
                        self.cursor_slider]:
             slider.observe(self._on_param_change, names='value')
         
+        self.save_point_button.on_click(self._on_save_point)
+        self.reveal_inverse_button.on_click(self._on_reveal_inverse)
         self.reset_button.on_click(self._on_reset)
         self.inverse_button.observe(self._on_inverse_toggle, names='value')
         
@@ -954,19 +1038,49 @@ class FunctionInverseVisualization:
         self._update_plot()
         
     def _on_inverse_toggle(self, change):
-        """Handle inverse toggle"""
+        """Handle inverse toggle (reflection box at cursor)"""
         self.show_inverse = change['new']
         # Update button text dynamically
         if self.show_inverse:
-            self.inverse_button.description = 'Hide Inverse'
+            self.inverse_button.description = 'Hide'
         else:
-            self.inverse_button.description = 'Show Inverse'
+            self.inverse_button.description = 'Calculate Inverse'
         self._update_plot()
         
+    def _on_save_point(self, button):
+        """Save current inverse point (f(x), x) to saved_inverse_points"""
+        func_type = self.func_dropdown.value
+        a, b, c = self.param_a.value, self.param_b.value, self.param_c.value
+        h_shift, v_shift = self.h_shift.value, self.v_shift.value
+        h_scale, v_scale = self.h_scale.value, self.v_scale.value
+        func, inv_func, domain, _, _, _, _, _ = get_function_definition(
+            func_type, a, b, c, h_shift, v_shift, h_scale, v_scale
+        )
+        x_min = h_scale * domain[0] + h_shift
+        x_max = h_scale * domain[1] + h_shift
+        cursor_x = self.cursor_slider.value
+        if x_min <= cursor_x <= x_max and inv_func is not None:
+            with np.errstate(all='ignore'):
+                cursor_y = float(func(cursor_x))
+            if np.isfinite(cursor_y):
+                self.saved_inverse_points.append((cursor_y, cursor_x))
+                n = len(self.saved_inverse_points)
+                self.inverse_status_html.value = f'<div style="padding: 4px; font-size: 12px; color: #666;">{n} inverse point(s) saved.</div>'
+        self._update_plot()
+    
+    def _on_reveal_inverse(self, button):
+        """Show the full f^{-1} curve"""
+        self.show_inverse_curve = True
+        self.inverse_status_html.value = '<div style="padding: 4px; font-size: 12px; color: #666;">Inverse function revealed.</div>'
+        self._update_plot()
+    
     def _on_reset(self, button):
-        """Reset all parameters"""
-        self.param_a.value = 1
-        self.param_b.value = 0
+        """Reset all parameters and inverse construction state"""
+        self.saved_inverse_points = []
+        self.show_inverse_curve = False
+        self.inverse_status_html.value = '<div style="padding: 4px; font-size: 12px; color: #666;"></div>'
+        self.param_a.value = 2
+        self.param_b.value = 1
         self.param_c.value = 0
         self.h_shift.value = 0
         self.v_shift.value = 0
@@ -1025,6 +1139,33 @@ class FunctionInverseVisualization:
                 line=dict(color='blue', width=3)
             ))
             
+            # Saved inverse points (construct inverse one point at a time)
+            if len(self.saved_inverse_points) > 0:
+                inv_x_pts = [p[0] for p in self.saved_inverse_points]
+                inv_y_pts = [p[1] for p in self.saved_inverse_points]
+                fig.add_trace(go.Scatter(
+                    x=inv_x_pts, y=inv_y_pts,
+                    mode='markers',
+                    name='Saved inverse points',
+                    marker=dict(color='red', size=12, symbol='circle',
+                              line=dict(color='white', width=2))
+                ))
+            
+            # Full inverse curve only when "Reveal Function" has been clicked
+            if self.show_inverse_curve and inv_func is not None:
+                y_finite = y[np.isfinite(y)]
+                if len(y_finite) > 0:
+                    y_range = np.linspace(np.nanmin(y_finite), np.nanmax(y_finite), 500)
+                    with np.errstate(all='ignore'):
+                        inv_x = inv_func(y_range)
+                        inv_x = np.where(np.isfinite(inv_x), inv_x, np.nan)
+                    fig.add_trace(go.Scatter(
+                        x=y_range, y=inv_x,
+                        mode='lines',
+                        name='f⁻¹(x)',
+                        line=dict(color='red', width=3)
+                    ))
+            
             cursor_x = self.cursor_slider.value
             
             if cursor_x >= x_min and cursor_x <= x_max:
@@ -1044,22 +1185,7 @@ class FunctionInverseVisualization:
                     self.cursor_info.value = f'<div style="padding: 5px; font-family: monospace; background-color: #e3f2fd; border-radius: 3px;"><b>Cursor:</b> x = {cursor_x:.3f}, f(x) = {cursor_y:.3f}</div>'
                     
                     if self.show_inverse and inv_func is not None:
-                        # Plot inverse function
-                        y_finite = y[np.isfinite(y)]
-                        if len(y_finite) > 0:
-                            y_range = np.linspace(np.nanmin(y_finite), np.nanmax(y_finite), 500)
-                            
-                            with np.errstate(all='ignore'):
-                                inv_x = inv_func(y_range)
-                                inv_x = np.where(np.isfinite(inv_x), inv_x, np.nan)
-                            
-                            fig.add_trace(go.Scatter(
-                                x=y_range, y=inv_x,
-                                mode='lines',
-                                name='f⁻¹(x)',
-                                line=dict(color='red', width=3)
-                            ))
-                        
+                        # Show inverse at cursor only (reflection box + point); full curve is separate (show_inverse_curve)
                         inv_point_x = cursor_y
                         inv_point_y = cursor_x
                         
@@ -1153,6 +1279,8 @@ class FunctionInverseVisualization:
             self.cursor_slider,
             self.cursor_info,
             widgets.HBox([self.inverse_button, self.reset_button]),
+            widgets.HBox([self.save_point_button, self.reveal_inverse_button]),
+            self.inverse_status_html,
         ], layout=widgets.Layout(padding='10px', border='1px solid #ddd', margin='5px'))
         
         left_panel = widgets.VBox([
@@ -1181,6 +1309,8 @@ class FunctionCombinationVisualization:
     def __init__(self):
         self.plot_output = widgets.Output()
         self.function_types = FUNCTION_TYPES
+        self.show_combo = False  # Combo curve hidden until "Reveal combo" is clicked
+        self.saved_combo_points = []  # List of (x, h(x)) for point-by-point construction
         
         self._create_widgets()
         self._setup_callbacks()
@@ -1254,6 +1384,26 @@ class FunctionCombinationVisualization:
         self.g_params_box = widgets.VBox([self.g_a, self.g_b, self.g_c])
         self.weights_box = widgets.VBox([self.w_f, self.w_g])
         
+        # x slider and Save point (Linear Combination: construct h(x) one point at a time)
+        self.x_slider = widgets.FloatSlider(
+            value=0, min=-5, max=5, step=0.1,
+            description='x:',
+            style={'description_width': 'initial'},
+            layout=widgets.Layout(width='250px')
+        )
+        self.save_point_button = widgets.Button(
+            description="Save point",
+            button_style='success',
+            layout=widgets.Layout(width='120px')
+        )
+        
+        # Reveal combo button (linear combination: show h(x) only after click)
+        self.reveal_combo_button = widgets.Button(
+            description="Reveal combo",
+            button_style='info',
+            layout=widgets.Layout(width='140px')
+        )
+        
         # Reset button
         self.reset_button = widgets.Button(
             description="Reset",
@@ -1273,24 +1423,49 @@ class FunctionCombinationVisualization:
         for slider in [self.f_a, self.f_b, self.f_c, self.g_a, self.g_b, self.g_c, self.w_f, self.w_g]:
             slider.observe(self._on_param_change, names='value')
         
+        self.x_slider.observe(self._on_param_change, names='value')
+        self.save_point_button.on_click(self._on_save_combo_point)
+        self.reveal_combo_button.on_click(self._on_reveal_combo)
         self.reset_button.on_click(self._on_reset)
     
     def _update_param_visibility(self, func_type, a_slider, b_slider, c_slider):
-        """Update parameter visibility based on function type"""
-        if func_type in ["Linear"]:
+        """Update parameter visibility and restrict ranges (combination demo: similar vertical scales)"""
+        if func_type == "Linear":
             c_slider.layout.visibility = 'hidden'
             b_slider.layout.visibility = 'visible'
+            a_slider.min, a_slider.max = -2, 2
+            b_slider.min, b_slider.max = -2, 2
         elif func_type in ["Quadratic", "Cubic"]:
             c_slider.layout.visibility = 'visible'
             b_slider.layout.visibility = 'visible'
-        elif func_type in ["Power", "Root"]:
+            a_slider.min, a_slider.max = -2, 2
+            b_slider.min, b_slider.max = -2, 2
+            c_slider.min, c_slider.max = -2, 2
+        elif func_type == "Power":
             b_slider.layout.visibility = 'hidden'
             c_slider.layout.visibility = 'hidden'
+            a_slider.min, a_slider.max = 0.25, 3
+        elif func_type == "Root":
+            b_slider.layout.visibility = 'hidden'
+            c_slider.layout.visibility = 'hidden'
+            a_slider.min, a_slider.max = 2, 5
+            if a_slider.value < 2:
+                a_slider.value = 2
         elif func_type in ["Exponential", "Logarithm"]:
             b_slider.layout.visibility = 'visible'
             c_slider.layout.visibility = 'hidden'
+            a_slider.min, a_slider.max = -2, 2
+            b_slider.min, b_slider.max = 0.5, 3
             if b_slider.value <= 0:
                 b_slider.value = 2
+        elif func_type == "Bump (Normal)":
+            b_slider.layout.visibility = 'visible'
+            c_slider.layout.visibility = 'visible'
+            a_slider.min, a_slider.max = 0.1, 2
+            b_slider.min, b_slider.max = -3, 3
+            c_slider.min, c_slider.max = 0.2, 5
+            if c_slider.value < 0.2:
+                c_slider.value = 1
     
     def _on_f_type_change(self, change):
         self._update_param_visibility(self.f_type.value, self.f_a, self.f_b, self.f_c)
@@ -1306,17 +1481,55 @@ class FunctionCombinationVisualization:
             self.weights_box.layout.display = 'flex'
             self.display_dropdown.layout.display = 'flex'
             self.product_order.layout.display = 'none'
+            self.x_slider.layout.display = 'flex'
+            self.save_point_button.layout.display = 'flex'
+            self.reveal_combo_button.layout.display = 'flex'
         else:
             self.weights_box.layout.display = 'none'
             self.display_dropdown.layout.display = 'none'
             self.product_order.layout.display = 'flex'
+            self.x_slider.layout.display = 'flex'
+            self.save_point_button.layout.display = 'flex'
+            self.reveal_combo_button.layout.display = 'flex'
+            self.show_combo = False
+            self.reveal_combo_button.description = "Reveal combo"
         self._update_plot()
         
     def _on_param_change(self, change):
         self._update_plot()
     
+    def _on_save_combo_point(self, button):
+        """Save current (x, h(x)) to saved_combo_points (Linear Combination or Multiply)"""
+        f_func, f_domain, _ = create_simple_function(
+            self.f_type.value, self.f_a.value, self.f_b.value, self.f_c.value
+        )
+        g_func, g_domain, _ = create_simple_function(
+            self.g_type.value, self.g_a.value, self.g_b.value, self.g_c.value
+        )
+        x_val = self.x_slider.value
+        x_min = max(f_domain[0], g_domain[0], -5)
+        x_max = min(f_domain[1], g_domain[1], 5)
+        if x_min <= x_val <= x_max:
+            with np.errstate(all='ignore'):
+                if self.mode_dropdown.value == "Linear Combination":
+                    h_val = self.w_f.value * f_func(x_val) + self.w_g.value * g_func(x_val)
+                else:
+                    h_val = float(f_func(x_val)) * float(g_func(x_val))
+            if np.isfinite(h_val):
+                self.saved_combo_points.append((x_val, h_val))
+        self._update_plot()
+    
+    def _on_reveal_combo(self, button):
+        """Toggle show combo (linear combination only)"""
+        self.show_combo = not self.show_combo
+        self.reveal_combo_button.description = "Hide combo" if self.show_combo else "Reveal combo"
+        self._update_plot()
+    
     def _on_reset(self, button):
-        """Reset all parameters to defaults"""
+        """Reset all parameters and combo construction state"""
+        self.saved_combo_points = []
+        self.show_combo = False
+        self.reveal_combo_button.description = "Reveal combo"
         # Reset function f
         self.f_type.value = "Linear"
         self.f_a.value = 1
@@ -1381,45 +1594,71 @@ class FunctionCombinationVisualization:
                 self.formula_html.value = f'<div style="padding: 10px; background-color: #e8f4fd; border-radius: 5px; font-size: 16px;"><b>Formula:</b> {formula_text}</div>'
                 
                 display_mode = self.display_dropdown.value
+                show_combo_curve = self.show_combo
                 
-                if display_mode == "Show Separate Functions":
+                if display_mode == "Show Separate Functions" or not show_combo_curve:
                     fig = go.Figure()
-                    
                     fig.add_trace(go.Scatter(x=x, y=w_f * f_y, mode='lines', name=f'{w_f:.1f}·f(x)', 
                                             line=dict(color='blue', width=2)))
                     fig.add_trace(go.Scatter(x=x, y=w_g * g_y, mode='lines', name=f'{w_g:.1f}·g(x)', 
                                             line=dict(color='green', width=2)))
-                    fig.add_trace(go.Scatter(x=x, y=combo_y, mode='lines', name='h(x) = w_f·f + w_g·g', 
-                                            line=dict(color='red', width=3)))
-                    
+                    if show_combo_curve:
+                        fig.add_trace(go.Scatter(x=x, y=combo_y, mode='lines', name='h(x) = w_f·f + w_g·g', 
+                                                line=dict(color='red', width=3)))
+                    # Saved combo points (construct h(x) one point at a time)
+                    if len(self.saved_combo_points) > 0:
+                        sx = [p[0] for p in self.saved_combo_points]
+                        sy = [p[1] for p in self.saved_combo_points]
+                        fig.add_trace(go.Scatter(
+                            x=sx, y=sy, mode='markers',
+                            name='Saved combo points',
+                            marker=dict(color='purple', size=12, symbol='circle',
+                                      line=dict(color='white', width=2))
+                        ))
+                    # Current x marker: combo at x_slider
+                    x_val = self.x_slider.value
+                    if x_min <= x_val <= x_max:
+                        with np.errstate(all='ignore'):
+                            cur_h = w_f * float(f_func(x_val)) + w_g * float(g_func(x_val))
+                        if np.isfinite(cur_h):
+                            fig.add_trace(go.Scatter(
+                                x=[x_val], y=[cur_h], mode='markers',
+                                name=f'(x, h(x)) = ({x_val:.2f}, {cur_h:.2f})',
+                                marker=dict(color='black', size=10, symbol='circle',
+                                          line=dict(color='white', width=1))
+                            ))
                     fig.update_layout(
-                        title='Linear Combination: Separate Functions',
+                        title='Linear Combination: Separate Functions' + (' (combo revealed)' if show_combo_curve else ''),
                         xaxis_title='x', yaxis_title='y',
-                        width=800, height=500,
+                        width=700, height=500,
                         showlegend=True
                     )
                     
-                else:  # Stacked
+                else:  # Stacked (only when combo revealed)
                     fig = go.Figure()
-                    
-                    # First component (filled)
                     fig.add_trace(go.Scatter(
                         x=x, y=w_f * f_y, mode='lines', name=f'{w_f:.1f}·f(x)',
                         fill='tozeroy', fillcolor='rgba(0, 0, 255, 0.3)',
                         line=dict(color='blue', width=2)
                     ))
-                    
-                    # Sum (filled on top)
                     fig.add_trace(go.Scatter(
                         x=x, y=combo_y, mode='lines', name='h(x) = w_f·f + w_g·g',
                         fill='tonexty', fillcolor='rgba(0, 255, 0, 0.3)',
                         line=dict(color='red', width=3)
                     ))
-                    
+                    if len(self.saved_combo_points) > 0:
+                        sx = [p[0] for p in self.saved_combo_points]
+                        sy = [p[1] for p in self.saved_combo_points]
+                        fig.add_trace(go.Scatter(
+                            x=sx, y=sy, mode='markers',
+                            name='Saved combo points',
+                            marker=dict(color='purple', size=12, symbol='circle',
+                                      line=dict(color='white', width=2))
+                        ))
                     fig.update_layout(
                         title='Linear Combination: Stacked View',
                         xaxis_title='x', yaxis_title='y',
-                        width=800, height=500,
+                        width=700, height=500,
                         showlegend=True
                     )
                 
@@ -1444,36 +1683,60 @@ class FunctionCombinationVisualization:
                 fig = make_subplots(rows=1, cols=2, 
                                    subplot_titles=('Factors Panel', 'Product Panel'))
                 
-                # Factors panel
-                # Solid line for first factor
+                # Factors panel: only the two factors (no dashed multiples)
                 fig.add_trace(go.Scatter(x=x, y=first_y, mode='lines', name=first_name,
                                         line=dict(color='blue', width=3)), row=1, col=1)
+                fig.add_trace(go.Scatter(x=x, y=second_y, mode='lines', name=second_name,
+                                        line=dict(color='green', width=2)), row=1, col=1)
                 
-                # Dashed lines for multiples of first factor
+                # Product panel: grey dashed multiples always visible
                 multiples = np.arange(-4, 4.5, 0.5)
                 for mult in multiples:
                     if mult == 0:
                         continue
-                    opacity = 0.2 if abs(mult) > 2 else 0.4
+                    # Multiples in product space: (mult * first) * second
+                    mult_product_y = (mult * first_y) * second_y
                     fig.add_trace(go.Scatter(
-                        x=x, y=mult * first_y, mode='lines',
-                        name=f'{mult:.1f}·{first_name}' if mult in [-4, -2, 0, 2, 4] else '',
-                        line=dict(color='lightblue', width=1, dash='dash'),
-                        opacity=opacity,
+                        x=x, y=mult_product_y, mode='lines',
+                        name=f'{mult:.1f}·{first_name}·{second_name}' if mult in [-4, -2, 2, 4] else '',
+                        line=dict(color='gray', width=1.5, dash='dash'),
+                        opacity=0.7,
                         showlegend=(mult in [-4, -2, 2, 4])
-                    ), row=1, col=1)
+                    ), row=1, col=2)
+                # Solid product curve (1× first factor) only when revealed
+                if self.show_combo:
+                    fig.add_trace(go.Scatter(
+                        x=x, y=product_y, mode='lines', name='h(x) = 1·f·g',
+                        line=dict(color='red', width=4),
+                        fill='tozeroy', fillcolor='rgba(255, 0, 0, 0.08)'
+                    ), row=1, col=2)
                 
-                # Second factor
-                fig.add_trace(go.Scatter(x=x, y=second_y, mode='lines', name=second_name,
-                                        line=dict(color='green', width=2)), row=1, col=1)
-                
-                # Product panel
-                fig.add_trace(go.Scatter(x=x, y=product_y, mode='lines', name='f(x)·g(x)',
-                                        line=dict(color='red', width=3)), row=1, col=2)
+                # Saved product points (always in Product panel)
+                if len(self.saved_combo_points) > 0:
+                    sx = [p[0] for p in self.saved_combo_points]
+                    sy = [p[1] for p in self.saved_combo_points]
+                    fig.add_trace(go.Scatter(
+                        x=sx, y=sy, mode='markers',
+                        name='Saved combo points',
+                        marker=dict(color='purple', size=12, symbol='circle',
+                                  line=dict(color='white', width=2))
+                    ), row=1, col=2)
+                # Current-point marker at (x_slider.value, f*g)
+                x_val = self.x_slider.value
+                if x_min <= x_val <= x_max:
+                    with np.errstate(all='ignore'):
+                        cur_h = float(f_func(x_val)) * float(g_func(x_val))
+                    if np.isfinite(cur_h):
+                        fig.add_trace(go.Scatter(
+                            x=[x_val], y=[cur_h], mode='markers',
+                            name=f'(x, h(x)) = ({x_val:.2f}, {cur_h:.2f})',
+                            marker=dict(color='black', size=10, symbol='circle',
+                                      line=dict(color='white', width=1))
+                        ), row=1, col=2)
                 
                 fig.update_layout(
                     title='Function Product',
-                    width=1000, height=450,
+                    width=900, height=450,
                     showlegend=True
                 )
                 fig.update_xaxes(title_text='x')
@@ -1486,8 +1749,11 @@ class FunctionCombinationVisualization:
         self._update_param_visibility(self.f_type.value, self.f_a, self.f_b, self.f_c)
         self._update_param_visibility(self.g_type.value, self.g_a, self.g_b, self.g_c)
         
-        # Initially hide product order
+        # Initially hide product order; show x_slider, Save point, Reveal combo (Linear Combination default)
         self.product_order.layout.display = 'none'
+        self.x_slider.layout.display = 'flex'
+        self.save_point_button.layout.display = 'flex'
+        self.reveal_combo_button.layout.display = 'flex'
         
         self._update_plot()
         
@@ -1512,10 +1778,17 @@ class FunctionCombinationVisualization:
             self.display_dropdown,
             self.product_order,
             self.weights_box,
+        ], layout=widgets.Layout(padding='10px', border='1px solid #ddd', margin='5px'))
+        
+        # Cursor control (slider + buttons), same-level box as f_box, g_box, mode_box
+        cursor_box = widgets.VBox([
+            widgets.HTML('<h4>Cursor Control</h4>'),
+            self.x_slider,
+            widgets.HBox([self.save_point_button, self.reveal_combo_button]),
             self.reset_button,
         ], layout=widgets.Layout(padding='10px', border='1px solid #ddd', margin='5px'))
         
-        left_panel = widgets.VBox([f_box, g_box, mode_box], layout=widgets.Layout(width='300px'))
+        left_panel = widgets.VBox([f_box, g_box, mode_box, cursor_box], layout=widgets.Layout(width='360px'))
         
         right_panel = widgets.VBox([
             self.formula_html,
@@ -1624,6 +1897,14 @@ class FunctionCompositionVisualization:
             value='<div style="padding: 10px; background-color: #f5f5f5; border-radius: 5px;">Click "Compose Functions" to begin the composition process.</div>'
         )
         
+        # Formula displays for inner and outer
+        self.inner_formula_html = widgets.HTML(
+            value='<div style="padding: 6px; background-color: #e8f4fd; border-radius: 4px; font-size: 14px;"><b>f_inner(x) =</b> —</div>'
+        )
+        self.outer_formula_html = widgets.HTML(
+            value='<div style="padding: 6px; background-color: #e8f4fd; border-radius: 4px; font-size: 14px;"><b>f_outer(x) =</b> —</div>'
+        )
+        
         # Param boxes
         self.inner_params = widgets.VBox([self.inner_a, self.inner_b, self.inner_c])
         self.outer_params = widgets.VBox([self.outer_a, self.outer_b, self.outer_c])
@@ -1656,6 +1937,10 @@ class FunctionCompositionVisualization:
         elif func_type in ["Power", "Root"]:
             b_slider.layout.visibility = 'hidden'
             c_slider.layout.visibility = 'hidden'
+            if func_type == "Root":
+                a_slider.min, a_slider.max = 2, 10
+                if a_slider.value < 2:
+                    a_slider.value = 2
         elif func_type in ["Exponential", "Logarithm"]:
             b_slider.layout.visibility = 'visible'
             c_slider.layout.visibility = 'hidden'
@@ -1677,8 +1962,8 @@ class FunctionCompositionVisualization:
         self._update_plot()
     
     def _on_x_change(self, change):
-        if self.show_construction:
-            self._update_plot()
+        """Update plot when x value changes (input point and, if active, construction)"""
+        self._update_plot()
     
     def _reset_state(self):
         """Reset composition state"""
@@ -1715,11 +2000,11 @@ class FunctionCompositionVisualization:
         )
         
         with np.errstate(all='ignore'):
-            inner_val = inner_func(x_val)
-            composite_val = outer_func(inner_val)
+            inner_val = float(inner_func(x_val))
+            composite_val = float(outer_func(inner_val))
         
         if np.isfinite(composite_val):
-            self.saved_points.append((x_val, composite_val))
+            self.saved_points.append((float(x_val), composite_val))
             self.status_html.value = f'<div style="padding: 10px; background-color: #d4edda; border-radius: 5px;">Saved point ({x_val:.2f}, {composite_val:.2f}). {len(self.saved_points)} points saved.</div>'
         
         self._update_plot()
@@ -1746,6 +2031,10 @@ class FunctionCompositionVisualization:
             outer_func, outer_domain, outer_label = create_simple_function(
                 self.outer_type.value, self.outer_a.value, self.outer_b.value, self.outer_c.value
             )
+            
+            # Update formula displays
+            self.inner_formula_html.value = f'<div style="padding: 6px; background-color: #e8f4fd; border-radius: 4px; font-size: 14px;"><b>f_inner(x) =</b> {inner_label}</div>'
+            self.outer_formula_html.value = f'<div style="padding: 6px; background-color: #e8f4fd; border-radius: 4px; font-size: 14px;"><b>f_outer(x) =</b> {outer_label}</div>'
             
             plot_min, plot_max = -5, 5
             x = np.linspace(plot_min, plot_max, 500)
@@ -1777,6 +2066,16 @@ class FunctionCompositionVisualization:
                 x=x, y=outer_y, mode='lines',
                 name=f'f_outer: {outer_label}',
                 line=dict(color='green', width=2)
+            ))
+            
+            # Always show input point [x, 0] on x-axis
+            x_val = self.x_slider.value
+            fig.add_trace(go.Scatter(
+                x=[x_val], y=[0],
+                mode='markers',
+                name=f'Input (x, 0) = ({x_val:.2f}, 0)',
+                marker=dict(color='black', size=10, symbol='circle',
+                            line=dict(color='white', width=1))
             ))
             
             # Saved points
@@ -1888,12 +2187,14 @@ class FunctionCompositionVisualization:
         inner_box = widgets.VBox([
             widgets.HTML('<h4>Inner Function f_inner(x)</h4>'),
             self.inner_type,
+            self.inner_formula_html,
             self.inner_params,
         ], layout=widgets.Layout(padding='10px', border='1px solid #ddd', margin='5px'))
         
         outer_box = widgets.VBox([
             widgets.HTML('<h4>Outer Function f_outer(x)</h4>'),
             self.outer_type,
+            self.outer_formula_html,
             self.outer_params,
         ], layout=widgets.Layout(padding='10px', border='1px solid #ddd', margin='5px'))
         
