@@ -44,7 +44,7 @@ project:
             - file: content/Chapter_03/04_Chapter_Summary.ipynb
         - file: content/Chapter_04/00_Summarizing_Distributions_with_Expectations.ipynb
           children:
-            - file: content/Chapter_04/01_Expectated_Values.ipynb
+            - file: content/Chapter_04/01_Expected_Values.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
