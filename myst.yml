@@ -46,6 +46,7 @@ project:
           children:
             - file: content/Chapter_04/01_Expected_Values.ipynb
             - file: content/Chapter_04/02_Rules_of_Expectation.ipynb
+            - file: content/Chapter_04/03_Variance.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
