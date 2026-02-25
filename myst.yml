@@ -47,7 +47,8 @@ project:
             - file: content/Chapter_04/01_Expected_Values.ipynb
             - file: content/Chapter_04/02_Rules_of_Expectation.ipynb
             - file: content/Chapter_04/03_Variance.ipynb
-            - file: content/Chapter_04/04_Chapter_Summary.ipynb
+            - file: content/Chapter_04/04_Categorizing_Distributions_by_their_Tails.ipynb
+            - file: content/Chapter_04/05_Chapter_Summary.ipynb
         - file: content/Chapter_05/00_Comparing_Tails.ipynb
           children:
             - file: content/Chapter_05/01_Tails_and_Rare_Events.ipynb
