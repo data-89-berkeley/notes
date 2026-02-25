@@ -51,6 +51,7 @@ project:
         - file: content/Chapter_05/00_Comparing_Tails.ipynb
           children:
             - file: content/Chapter_05/01_Tails_and_Rare_Events.ipynb
+            - file: content/Chapter_05/02_Asymptotic_Rates.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
