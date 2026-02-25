@@ -53,6 +53,7 @@ project:
             - file: content/Chapter_05/01_Tails_and_Rare_Events.ipynb
             - file: content/Chapter_05/02_Asymptotic_Rates.ipynb
             - file: content/Chapter_05/03_Series_Convergence.ipynb
+            - file: content/Chapter_05/04_Chapter_Summary.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
