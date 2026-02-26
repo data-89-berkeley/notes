@@ -55,6 +55,9 @@ project:
             - file: content/Chapter_05/03_Series_Convergence.ipynb
             - file: content/Chapter_05/04_Categorizing_Distributions_by_their_Tails.ipynb
             - file: content/Chapter_05/05_Chapter_Summary.ipynb
+        - file: content/Chapter_06/00_Function_Approximation.ipynb
+          children:
+            - file: content/Chapter_06/01_Taylor_Series.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
