@@ -58,6 +58,7 @@ project:
         - file: content/Chapter_06/00_Function_Approximation.ipynb
           children:
             - file: content/Chapter_06/01_Taylor_Series.ipynb
+            - file: content/Chapter_06/02_Exponential_Approximation.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
