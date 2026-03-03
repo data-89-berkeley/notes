@@ -62,6 +62,7 @@ project:
             - file: content/Chapter_06/03_Factorial_Approximation.ipynb
             - file: content/Chapter_06/04_Limiting_Distributions.ipynb
             - file: content/Chapter_06/05_Chapter_Summary.ipynb
+        - file: content/Chapter_07/00_Integration_Techniques.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
