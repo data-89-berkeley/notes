@@ -71,6 +71,8 @@ project:
           children:
             - file: content/Chapter_08/01_Coordinate_Systems.ipynb
             - file: content/Chapter_08/02_Functions_of_Multiple_Variables.ipynb
+            - file: content/Chapter_08/03_Joint_Distributions.ipynb
+            - file: content/Chapter_08/04_Chapter_Summary.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
