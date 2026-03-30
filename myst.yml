@@ -76,6 +76,7 @@ project:
         - file: content/Chapter_09/00_Derivatives_of_Multivariate_Functions.ipynb
           children:
             - file: content/Chapter_09/01_Partial_Derivatives_and_Linearization.ipynb
+            - file: content/Chapter_09/02_Gradients.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
