@@ -83,6 +83,7 @@ project:
           children:
             - file: content/Chapter_10/01_Iterated_Integration.ipynb
             - file: content/Chapter_10/02_Conditional_Expectation.ipynb
+            - file: content/Chapter_10/04_Chapter_Summary.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
