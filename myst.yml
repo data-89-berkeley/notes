@@ -88,6 +88,7 @@ project:
         - file: content/Chapter_11/00_Measuring_Association.ipynb
           children:
             - file: content/Chapter_11/01_Covariance_and_Correlation.ipynb
+            - file: content/Chapter_11/02_Linear_Regression.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
