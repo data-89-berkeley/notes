@@ -93,6 +93,7 @@ project:
         - file: content/Chapter_12/00_Estimation.ipynb
           children:
             - file: content/Chapter_12/01_Estimators.ipynb
+            - file: content/Chapter_12/02_Properties_of_Estimators.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
