@@ -95,6 +95,7 @@ project:
             - file: content/Chapter_12/01_Estimators.ipynb
             - file: content/Chapter_12/02_Properties_of_Estimators.ipynb
             - file: content/Chapter_12/03_Chapter_Summary.ipynb
+        - file: content/Chapter_13/00_Concentration.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
