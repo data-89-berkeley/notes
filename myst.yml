@@ -99,6 +99,7 @@ project:
           children:
             - file: content/Chapter_13/01_Variance_of_Sums_and_Averages.ipynb
             - file: content/Chapter_13/02_Tail_Bounds.ipynb
+            - file: content/Chapter_13/03_The_Law_of_Large_Numbers.ipynb
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
