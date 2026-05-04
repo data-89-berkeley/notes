@@ -105,6 +105,7 @@ project:
         - file: content/Appendix/00_Appendix.ipynb
           children:
             - file: content/Appendix/01_Combinatorics_Helper.ipynb
+            - file: content/Appendix/02_Distributions_Reference.ipynb
             - file: content/Appendix/04_Demos_Glossary.ipynb
 site:
   template: book-theme
