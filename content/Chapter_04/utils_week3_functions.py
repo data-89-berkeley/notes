@@ -696,52 +696,25 @@ class FunctionPropertiesVisualization:
             self.h_scale.value, self.v_scale.value
         )
         
-        results = []
-        correct_count = 0
-        total = 5
-        
-        if self.check_symmetric.value == is_symmetric:
-            results.append(('Symmetric', '✓', 'green'))
-            correct_count += 1
-        else:
-            results.append(('Symmetric', '✗', 'red'))
-            
-        if self.check_monotonic.value == is_monotonic:
-            results.append(('Monotonic', '✓', 'green'))
-            correct_count += 1
-        else:
-            results.append(('Monotonic', '✗', 'red'))
-            
-        if self.check_convex.value == is_convex:
-            results.append(('Convex', '✓', 'green'))
-            correct_count += 1
-        else:
-            results.append(('Convex', '✗', 'red'))
-            
-        if self.check_concave.value == is_concave:
-            results.append(('Concave', '✓', 'green'))
-            correct_count += 1
-        else:
-            results.append(('Concave', '✗', 'red'))
-            
-        if self.check_nonnegative.value == is_nonnegative:
-            results.append(('Nonnegative', '✓', 'green'))
-            correct_count += 1
-        else:
-            results.append(('Nonnegative', '✗', 'red'))
-        
+        # Each line: ✓ iff the function actually has that property; color = green if the user
+        # matched that fact, red if not (symbols reflect ground truth, not the user's guess).
+        rows = [
+            ('Symmetric (even function)', self.check_symmetric.value, is_symmetric),
+            ('Monotonic', self.check_monotonic.value, is_monotonic),
+            ('Convex', self.check_convex.value, is_convex),
+            ('Concave', self.check_concave.value, is_concave),
+            ('Nonnegative', self.check_nonnegative.value, is_nonnegative),
+        ]
+        total = len(rows)
+        correct_count = sum(1 for _, user, truth in rows if user == truth)
+
         bg_color = "#d4edda" if correct_count == total else "#f8d7da"
         feedback_html = f'<div style="padding: 10px; background-color: {bg_color}; border-radius: 5px;">'
         feedback_html += f'<b>Score: {correct_count}/{total}</b><br><br>'
-        for name, symbol, color in results:
-            feedback_html += f'<span style="color: {color};">{symbol} {name}</span><br>'
-        
-        feedback_html += '<br><b>Correct answers:</b><br>'
-        feedback_html += f'Symmetric: {"Yes" if is_symmetric else "No"}<br>'
-        feedback_html += f'Monotonic: {"Yes" if is_monotonic else "No"}<br>'
-        feedback_html += f'Convex: {"Yes" if is_convex else "No"}<br>'
-        feedback_html += f'Concave: {"Yes" if is_concave else "No"}<br>'
-        feedback_html += f'Nonnegative: {"Yes" if is_nonnegative else "No"}'
+        for label, user, truth in rows:
+            symbol = '✓' if truth else '✗'
+            color = 'green' if user == truth else 'red'
+            feedback_html += f'<span style="color: {color};">{symbol} {label}</span><br>'
         feedback_html += '</div>'
         
         self.quiz_feedback.value = feedback_html
