@@ -78,6 +78,7 @@ project:
             - file: content/Chapter_09/01_Partial_Derivatives_and_Linearization.ipynb
             - file: content/Chapter_09/02_Gradients.ipynb
             - file: content/Chapter_09/03_Unconstrained_Optimization.ipynb
+            - file: content/Chapter_09/04_Constrained_Optimization.ipynb
             - file: content/Chapter_09/05_Chapter_Summary.ipynb
         - file: content/Chapter_10/00_Integrals_of_Multivariate_Functions.ipynb
           children:
