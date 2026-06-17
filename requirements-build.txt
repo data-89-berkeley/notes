@@ -1,1 +1,1 @@
-jupyterbook>=2
+jupyter-book>=2
