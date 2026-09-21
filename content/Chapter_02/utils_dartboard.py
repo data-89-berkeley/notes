@@ -105,9 +105,8 @@ def determine_batch_size(sample_index):
 class DartboardVisualization:
     """Interactive visualization for dartboard sampling and radial distribution"""
     
-    # Default values for computing fixed y-axis range
+    # Default histogram bin width
     DEFAULT_BIN_WIDTH = 0.05
-    DEFAULT_N_SAMPLES = 1000
     
     def __init__(self, R=1.0):
         self.R = R  # Radius of the disc
@@ -130,19 +129,14 @@ class DartboardVisualization:
         # - density: 2/R
         # - proportion: (2/R) * bin_width  
         # - count: (2/R) * bin_width * n_samples
-        self._compute_fixed_y_ranges()
-        
         self._create_widgets()
         self._setup_callbacks()
     
-    def _compute_fixed_y_ranges(self):
-        """Compute fixed y-axis ranges for each mode based on default settings"""
-        max_pdf = 2.0 / self.R  # PDF at r = R
-        
-        # Fixed ranges with 1.1x margin
-        self.fixed_y_max_density = max_pdf * 1.1
-        self.fixed_y_max_proportion = max_pdf * self.DEFAULT_BIN_WIDTH * 1.1
-        self.fixed_y_max_count = max_pdf * self.DEFAULT_BIN_WIDTH * self.DEFAULT_N_SAMPLES * 1.1
+    @staticmethod
+    def _histogram_y_max(y_values):
+        """Return a padded maximum that keeps every histogram bar visible."""
+        largest_bin = float(np.max(y_values)) if len(y_values) else 0.0
+        return largest_bin * 1.1 if largest_bin > 0 else 1.0
     
     def _create_widgets(self):
         """Create all widgets"""
@@ -495,19 +489,19 @@ class DartboardVisualization:
             fig.update_xaxes(title_text="x", range=[-1.2*self.R, 1.2*self.R], row=1, col=1)
             fig.update_yaxes(title_text="y", range=[-1.2*self.R, 1.2*self.R], row=1, col=1, scaleanchor="x", scaleratio=1)
             
-            # Histogram plot - use fixed y-axis range based on current mode
+            # Histogram plot empty state (data plots scale from their bins).
             if self.y_axis_mode == "count":
-                fixed_y_max = self.fixed_y_max_count
+                y_max = 1.0
                 y_label = "Count"
             elif self.y_axis_mode == "proportion":
-                fixed_y_max = self.fixed_y_max_proportion
+                y_max = 1.0
                 y_label = "Proportion"
             else:  # density
-                fixed_y_max = self.fixed_y_max_density
+                y_max = 2.0 / self.R
                 y_label = "Density"
             
             fig.update_xaxes(title_text="Radial Distance (r)", range=[0, self.R], row=1, col=2)
-            fig.update_yaxes(title_text=y_label, range=[0, fixed_y_max], row=1, col=2)
+            fig.update_yaxes(title_text=y_label, range=[0, y_max], row=1, col=2)
             
             fig.update_layout(height=500, showlegend=True, title="Dartboard Sampling")
             fig.show()
@@ -702,6 +696,10 @@ class DartboardVisualization:
                 y_values = (counts / len(self.r_samples)) / bin_widths if len(self.r_samples) > 0 else counts
                 y_values = np.where(bin_widths > 0, y_values, 0)
                 y_label = "Density"
+
+            # Recalculate on every redraw so sample-count and bin-width changes
+            # always leave room for the tallest observed bar.
+            y_max = self._histogram_y_max(y_values)
             
             # Color histogram bars based on selected region
             if show_shaded_region and prob_type != "":
@@ -812,60 +810,45 @@ class DartboardVisualization:
                             row=1, col=2
                         )
             
-            # Add vertical lines for bounds (use fixed y-axis range)
+            # Add vertical lines for bounds using the current histogram range.
             if show_shaded_region and prob_type != "":
-                if self.y_axis_mode == "count":
-                    max_y = self.fixed_y_max_count
-                elif self.y_axis_mode == "proportion":
-                    max_y = self.fixed_y_max_proportion
-                else:  # density
-                    max_y = self.fixed_y_max_density
-                
                 if prob_type == "of outcome":
                     fig.add_trace(
-                        go.Scatter(x=[bound1, bound1], y=[0, max_y], mode='lines',
+                        go.Scatter(x=[bound1, bound1], y=[0, y_max], mode='lines',
                                   line=dict(color='red', width=3, dash='dash'),
                                   showlegend=False, hoverinfo='skip'),
                         row=1, col=2
                     )
                 elif prob_type == "under upper bound":
                     fig.add_trace(
-                        go.Scatter(x=[bound2, bound2], y=[0, max_y], mode='lines',
+                        go.Scatter(x=[bound2, bound2], y=[0, y_max], mode='lines',
                                   line=dict(color='red', width=3, dash='dash'),
                                   showlegend=False, hoverinfo='skip'),
                         row=1, col=2
                     )
                 elif prob_type == "above lower bound":
                     fig.add_trace(
-                        go.Scatter(x=[bound1, bound1], y=[0, max_y], mode='lines',
+                        go.Scatter(x=[bound1, bound1], y=[0, y_max], mode='lines',
                                   line=dict(color='red', width=3, dash='dash'),
                                   showlegend=False, hoverinfo='skip'),
                         row=1, col=2
                     )
                 elif prob_type == "in interval":
                     fig.add_trace(
-                        go.Scatter(x=[bound1, bound1], y=[0, max_y], mode='lines',
+                        go.Scatter(x=[bound1, bound1], y=[0, y_max], mode='lines',
                                   line=dict(color='red', width=3, dash='dash'),
                                   showlegend=False, hoverinfo='skip'),
                         row=1, col=2
                     )
                     fig.add_trace(
-                        go.Scatter(x=[bound2, bound2], y=[0, max_y], mode='lines',
+                        go.Scatter(x=[bound2, bound2], y=[0, y_max], mode='lines',
                                   line=dict(color='red', width=3, dash='dash'),
                                   showlegend=False, hoverinfo='skip'),
                         row=1, col=2
                     )
             
-            # Use fixed y-axis range based on mode (computed from expected rightmost bin height)
-            if self.y_axis_mode == "count":
-                fixed_y_max = self.fixed_y_max_count
-            elif self.y_axis_mode == "proportion":
-                fixed_y_max = self.fixed_y_max_proportion
-            else:  # density
-                fixed_y_max = self.fixed_y_max_density
-            
             fig.update_xaxes(title_text="Radial Distance (r)", range=[0, self.R], row=1, col=2)
-            fig.update_yaxes(title_text=y_label, range=[0, fixed_y_max], row=1, col=2)
+            fig.update_yaxes(title_text=y_label, range=[0, y_max], row=1, col=2)
             fig.update_layout(height=500, showlegend=True, title="Dartboard Sampling")
             
             # Compute probabilities
