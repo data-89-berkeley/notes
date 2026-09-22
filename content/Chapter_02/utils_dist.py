@@ -244,9 +244,18 @@ def determine_batch_size(sample_index):
 
 
 class DistributionProbabilityVisualization:
-    """Interactive visualization for distribution sampling and probability calculation"""
+    """Interactive visualization for distribution sampling and probability calculation."""
     
-    def __init__(self):
+    def __init__(self, initial_dist_type=None, lock_distribution=False):
+        """
+        Parameters
+        ----------
+        initial_dist_type : str or None
+            Distribution to select when the visualization opens.
+        lock_distribution : bool
+            When True, restrict the type and distribution controls to
+            ``initial_dist_type`` while leaving its parameter controls active.
+        """
         self.samples = np.array([])
         self.plot_output = widgets.Output()
         self.show_pdf_flag = False  # Track whether PDF should be shown
@@ -258,7 +267,40 @@ class DistributionProbabilityVisualization:
         self.discrete_dists = ["Bernoulli", "Geometric", "Binomial", "Poisson", "Hypergeometric"]
         
         self._create_widgets()
+        self._set_initial_distribution(initial_dist_type, lock_distribution)
         self._setup_callbacks()
+
+    def _set_initial_distribution(self, dist_type, lock_distribution):
+        """Select and optionally lock a supported distribution before callbacks run."""
+        if dist_type is None:
+            return
+
+        if dist_type in self.discrete_dists:
+            category = "Discrete"
+            options = self.discrete_dists
+        elif dist_type in self.continuous_dists:
+            category = "Continuous"
+            options = self.continuous_dists
+        else:
+            supported = self.discrete_dists + self.continuous_dists
+            raise ValueError(
+                f"Unknown distribution {dist_type!r}. "
+                f"Choose one of: {', '.join(supported)}."
+            )
+
+        self.category_dropdown.value = category
+        self.dist_dropdown.options = options
+        self.dist_dropdown.value = dist_type
+
+        if lock_distribution:
+            self.category_dropdown.options = [category]
+            self.dist_dropdown.options = [dist_type]
+            self.category_dropdown.disabled = True
+            self.dist_dropdown.disabled = True
+            # A fixed explorer is meant to start as a distribution playground,
+            # so show its theoretical curve/masses without an extra click.
+            self.show_pdf_flag = True
+            self.show_pdf_button.description = "Hide PDF/PMF"
         
     def _create_widgets(self):
         """Create all widgets"""
@@ -736,7 +778,9 @@ class DistributionProbabilityVisualization:
             std = max(params.get('std', 1), 1e-6)
             return float(mean - 4 * std), float(mean + 4 * std)
         if dist_type == "Bernoulli":
-            return 0, 1
+            # Leave one outcome-width on either side of 0 and 1 so the
+            # histogram and PMF bars are fully visible.
+            return -1, 2
         if dist_type == "Geometric":
             p = max(params.get('p', 0.5), 0.01)
             return 1, int(max(15, stats.geom.ppf(0.99, p)))
@@ -783,7 +827,7 @@ class DistributionProbabilityVisualization:
         if dist_category == "Discrete":
             x_min = max(int(np.floor(x_min)), 0) if dist_type != "Bernoulli" else 0
             if dist_type == "Bernoulli":
-                x_min, x_max = 0, 1
+                x_min, x_max = -1, 2
             elif dist_type == "Binomial":
                 x_min = 0
                 x_max = int(max(x_max, params.get('n', 10)))
@@ -1356,8 +1400,12 @@ class DistributionProbabilityVisualization:
         # Update parameter widgets initially
         self._update_param_widgets()
         
-        # Show blank plot initially
-        self._show_blank_plot()
+        # A distribution-specific explorer starts with its fixed PDF/PMF;
+        # the general explorer preserves its blank initial plot.
+        if self.show_pdf_flag:
+            self._update_plot()
+        else:
+            self._show_blank_plot()
         
         # Create main layout
         controls = widgets.VBox([
@@ -1374,11 +1422,23 @@ class DistributionProbabilityVisualization:
         display(widgets.HBox([controls, self.plot_output]))
 
 
-def run_distribution_explorer():
+def run_distribution_explorer(dist_type=None):
     """
     Create and display the interactive distribution visualization.
-    This is the main entry point for the notebook.
+
+    Pass a supported distribution name (for example, ``"Bernoulli"`` or
+    ``"Normal"``) to lock the PDF/PMF explorer to that distribution while
+    retaining its parameter, sampling, and probability controls.
+
+    Parameters
+    ----------
+    dist_type : str or None
+        Optional distribution name. When supplied, the type and distribution
+        dropdowns are locked to that distribution.
     """
-    viz = DistributionProbabilityVisualization()
+    viz = DistributionProbabilityVisualization(
+        initial_dist_type=dist_type,
+        lock_distribution=dist_type is not None,
+    )
     viz.display()
     return viz
