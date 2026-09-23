@@ -837,6 +837,10 @@ class DistributionProbabilityVisualization:
                     range_padding = max(int((x_max - x_min) * 0.2), 3)
                     x_max = x_max + range_padding
 
+        # Exponential support starts at zero; do not pad into negative values.
+        if dist_category == "Continuous" and dist_type == "Exponential":
+            x_min = 0.0
+
         if x_min >= x_max:
             x_max = x_min + 1
 
