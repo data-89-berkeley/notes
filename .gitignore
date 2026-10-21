@@ -5,3 +5,6 @@
 _build/
 .env
 .venv/
+# anywidget demos: build output and dependencies
+content/_widgets/
+demos/node_modules/
