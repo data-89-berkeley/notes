@@ -61,10 +61,11 @@ The demos run in the reader's browser with no Python kernel, using MyST's [`{any
 To embed a demo, add a markdown cell like this to a notebook. The JSON sets the demo's options (here, which distribution it opens on):
 ````
 ```{anywidget} ../_widgets/dist_explorer.js
-:class: col-page-right
 {"dist": "Binomial"}
 ```
 ````
+
+Then give the cell the metadata `{"class": "col-page-right"}` so the demo extends past the text column into the right margin. The class has to go on the cell: the directive's own `:class:` option only reaches the widget inside the cell, where the page layout ignores it.
 
 While editing a demo, run `npm run watch --prefix demos` in a second terminal so it rebuilds on save, and `jupyter book start` picks up the change. To add a new demo, create `demos/src/demos/<name>.js` (copy the pattern in `cond_exp.js`), then embed `../_widgets/<name>.js` as above.
 

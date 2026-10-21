@@ -18,7 +18,7 @@ Each item is tagged:
 |---|---|---|
 | Runs in the browser with no kernel. Plots use plotly.js; matplotlib plots were redrawn in plotly. | The point of the migration. Readers no longer start Binder. | Port |
 | Random draws use a JS generator, so the numbers differ from numpy's. Fixed seeds (`random_state=123`, etc.) became fixed JS seeds. | numpy's random streams can't be reproduced in JS. The statistics are the same; the exact values are not. | Port |
-| Plots fit the page column (`col-page-right`, about 720 px on a laptop), so they're smaller than Python's fixed-size figures (often 900–1150 px). | Fitting the column means no horizontal scroll on phones. Big demos could use `col-page` to get more width back. | Judgment |
+| Every demo cell has the metadata `"class": "col-page-right"`, so the demo starts at the text's left edge and extends into the right margin, as the Python cells did with `#| class: col-page-right`. Plots resize to fit, so phones get no horizontal scroll. | The text column is too narrow for the demos. The class goes in cell metadata because the theme ignores `:class:` on the `{anywidget}` directive for layout. `col-page` would also extend left, under the fixed sidebar. | Judgment |
 | Labels use Unicode (μ, σ, ρ, x₀) instead of LaTeX. | plotly can't render LaTeX inside the widget without loading MathJax. | Port |
 | Colors follow the book's light/dark theme. Legends sit below the plot. | Python's colors were light-mode only. Legends inside the plot covered data at phone width. | Port |
 | The 3D camera, zoom and pan survive slider moves (`uirevision`). | Python rebuilt the figure on every change, so the camera snapped back after every slider move. | Bug fix |
@@ -183,4 +183,3 @@ These use the `functions.js` fixes above (domains, quiz key, slider ranges).
 5. Convolution: cap heavy-tailed Pareto's very large s range?
 6. Gradient ascent: clear the path when x₀/y₀ move, or keep it until the next Run?
 7. Function demos: should Reveal be a toggle, and should a revealed curve stay through parameter changes?
-8. Sizing: widen the large demos with `col-page`?
