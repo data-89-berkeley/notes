@@ -6,7 +6,7 @@ This textbook was built with [Jupyter Book (MyST flavor)](https://jupyterbook.or
 
 ## Structure
 
-Three things need to be edited.
+Three things need to be edited!
 - `myst.yml`: Configuration information about the textbook. Modify this file for things like:
     - changing the logo or favicon;
     - adding or removing launch buttons;
