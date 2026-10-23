@@ -210,15 +210,30 @@ def determine_batch_size(sample_index):
         return 8
 
 
-def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_samples=None, show_Y=False, show_density=False, plot_output=None):
+def compute_fit_y_range(func_type, func_params, Y_samples=None):
+    """Compute a y-axis range that shows all of g(x) on [0, 1] (and any Y samples)"""
+    y_curve = get_g_function_curve(func_type, np.linspace(0, 1, 200), **func_params)
+    # Always include y=0 so the X samples and the x-axis line stay visible
+    y_min = min(0.0, float(np.min(y_curve)))
+    y_max = max(0.0, float(np.max(y_curve)))
+    if Y_samples is not None and len(Y_samples) > 0:
+        y_min = min(y_min, float(np.min(Y_samples)))
+        y_max = max(y_max, float(np.max(Y_samples)))
+    y_span = y_max - y_min
+    pad = 0.05 * y_span if y_span > 0 else 0.1
+    return (y_min - pad, y_max + pad)
+
+
+def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_samples=None, show_Y=False, show_density=False, plot_output=None, y_range=None):
     """Update the main plot with function curve, samples, and histograms
-    
+
     Parameters:
     - X_samples: X values to plot
     - Y_samples: Y values to plot (if show_Y is True)
     - show_Y: If True, show Y samples on the curve with both X and Y histograms; if False, show X samples on x-axis with X histogram only
     - show_density: If True, show theoretical density curves
     - plot_output: widgets.Output() object for displaying the plot
+    - y_range: (min, max) for the main plot's y-axis; if None, use the fixed square [0, 1] view
     """
     # Create subplots layout: 2 rows x 2 columns
     # Row 1, Col 1: Y histogram (horizontal, left side) - only if show_Y
@@ -295,24 +310,13 @@ def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_sam
             )
         ), row=main_row, col=main_col)
     
-    # Determine y-axis range for main plot (used for alignment)
-    if len(y_curve) > 0:
-        y_min = float(np.min(y_curve))
-        y_max = float(np.max(y_curve))
-        # If showing Y samples, include them in range
-        if show_Y and Y_samples is not None and len(Y_samples) > 0:
-            y_min = min(y_min, float(np.min(Y_samples)))
-            y_max = max(y_max, float(np.max(Y_samples)))
-        y_range = y_max - y_min
-        if y_range > 0:
-            y_min -= 0.1 * y_range
-            y_max += 0.1 * y_range
-        else:
-            y_min -= 0.1
-            y_max += 0.1
+    # Main plot y-axis: fixed square [0, 1] view by default, or a fitted range if given
+    fit_y = y_range is not None
+    if fit_y:
+        main_y_min, main_y_max = y_range
     else:
-        y_min, y_max = -0.1, 1.1
-    
+        main_y_min, main_y_max = -0.02, 1.02
+
     # Add X histogram on the bottom
     X_density = np.array([])
     if len(X_samples) > 0:
@@ -349,8 +353,11 @@ def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_sam
     # Add Y histogram on the left (rotated/horizontal) - only if show_Y
     Y_density = np.array([])
     if show_Y and Y_samples is not None and len(Y_samples) > 0:
-        # Filter Y_samples to exclude values >= 1 (similar to X histogram)
-        Y_samples_filtered = Y_samples[(Y_samples >= 0) & (Y_samples < 1)]
+        # Filter Y_samples to those visible on the main plot's y-axis
+        if fit_y:
+            Y_samples_filtered = Y_samples[(Y_samples >= main_y_min) & (Y_samples <= main_y_max)]
+        else:
+            Y_samples_filtered = Y_samples[(Y_samples >= 0) & (Y_samples < 1)]
         
         if len(Y_samples_filtered) > 0:
             # Determine range for Y histogram
@@ -472,7 +479,18 @@ def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_sam
     # Fixed axis limits for main plot (square aspect ratio, equal scaling)
     # Slight padding to ensure axes are visible
     main_x_min, main_x_max = -0.02, 1.02
-    main_y_min, main_y_max = -0.02, 1.02
+
+    # y-axis styling: square 1:1 with fixed ticks by default; free scale with auto ticks when fitted
+    if fit_y:
+        main_y_style = dict(tickmode='auto')
+    else:
+        main_y_style = dict(
+            scaleanchor="x",  # Make y-axis scale match x-axis
+            scaleratio=1,     # 1:1 aspect ratio (square)
+            tickmode='array',
+            tickvals=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            ticktext=['0', '0.2', '0.4', '0.6', '0.8', '1']
+        )
     
     # Add x-axis reference line at y=0 for visibility (always show it)
     fig.add_hline(
@@ -523,21 +541,17 @@ def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_sam
             showticklabels=True
         )
         fig.update_yaxes(
-            title_text="Y = g(X)", 
-            range=[main_y_min, main_y_max], 
+            title_text="Y = g(X)",
+            range=[main_y_min, main_y_max],
             row=1, col=2,
-            scaleanchor="x",  # Make y-axis scale match x-axis
-            scaleratio=1,     # 1:1 aspect ratio (square)
             showgrid=True,
             gridwidth=1,
             gridcolor="lightgray",
             zeroline=True,
             zerolinewidth=2,
             zerolinecolor="black",
-            tickmode='array',
-            tickvals=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            ticktext=['0', '0.2', '0.4', '0.6', '0.8', '1'],
-            showticklabels=True
+            showticklabels=True,
+            **main_y_style
         )
         
         # X histogram (bottom, row 2, col 2)
@@ -575,21 +589,17 @@ def update_plot(X_samples, dist_type, func_type, dist_params, func_params, Y_sam
             showticklabels=True
         )
         fig.update_yaxes(
-            title_text="Y = g(X)", 
-            range=[main_y_min, main_y_max], 
+            title_text="Y = g(X)",
+            range=[main_y_min, main_y_max],
             row=1, col=1,
-            scaleanchor="x",  # Make y-axis scale match x-axis
-            scaleratio=1,     # 1:1 aspect ratio (square)
             showgrid=True,
             gridwidth=1,
             gridcolor="lightgray",
             zeroline=True,
             zerolinewidth=2,
             zerolinecolor="black",
-            tickmode='array',
-            tickvals=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            ticktext=['0', '0.2', '0.4', '0.6', '0.8', '1'],
-            showticklabels=True
+            showticklabels=True,
+            **main_y_style
         )
         
         # X histogram
@@ -627,6 +637,7 @@ class ChangeOfDensityVisualization:
         self.current_Y_samples = np.array([])
         self.plot_output = widgets.Output()
         self.show_density = False  # Toggle for showing theoretical densities
+        self.y_range = None  # Fitted y-axis range for the main plot (None = default [0, 1] view)
         
         # Create all widgets
         self._create_widgets()
@@ -832,6 +843,13 @@ class ChangeOfDensityVisualization:
             disabled=True  # Disabled until samples are drawn
         )
         
+        # Fit Y-axis button: rescale the main plot's y-axis to show all of g(x)
+        self.fit_y_button = widgets.Button(
+            description='Fit Y-axis',
+            button_style='warning',
+            layout=widgets.Layout(width='200px', height='40px')
+        )
+
         self.status_html = widgets.HTML(value="Ready to draw samples.")
         
     def _setup_callbacks(self):
@@ -858,6 +876,7 @@ class ChangeOfDensityVisualization:
         self.draw_samples_button.on_click(self._on_draw_samples_clicked)
         self.transform_button.on_click(self._on_transform_clicked)
         self.show_density_button.on_click(self._on_show_density_clicked)
+        self.fit_y_button.on_click(self._on_fit_y_clicked)
         
     def _make_slider_observer(self, slider):
         """Create an observer function for a slider"""
@@ -915,7 +934,9 @@ class ChangeOfDensityVisualization:
         self.current_X_samples = np.array([])
         self.current_Y_samples = np.array([])
         self.show_density = False
-        
+        self.y_range = None
+        self.fit_y_button.description = 'Fit Y-axis'
+
         # Disable buttons that require samples
         self.show_density_button.disabled = True
         self.show_density_button.description = 'Show Density'
@@ -979,10 +1000,12 @@ class ChangeOfDensityVisualization:
         if len(self.current_Y_samples) > 0:
             update_plot(self.current_X_samples, self.dist_dropdown.value, self.func_dropdown.value, 
                        dist_params, func_params, Y_samples=self.current_Y_samples, 
-                       show_Y=True, show_density=self.show_density, plot_output=self.plot_output)
+                       show_Y=True, show_density=self.show_density, plot_output=self.plot_output,
+                       y_range=self.y_range)
         else:
             update_plot(self.current_X_samples, self.dist_dropdown.value, self.func_dropdown.value, 
-                       dist_params, func_params, show_density=self.show_density, plot_output=self.plot_output)
+                       dist_params, func_params, show_density=self.show_density, plot_output=self.plot_output,
+                       y_range=self.y_range)
     
     def _on_draw_samples_clicked(self, button):
         """Handle the Draw Samples button click with progressive visualization"""
@@ -1014,7 +1037,8 @@ class ChangeOfDensityVisualization:
             
             # Update plot
             update_plot(X_visible, dist_type, func_type, dist_params, func_params,
-                       show_density=self.show_density, plot_output=self.plot_output)
+                       show_density=self.show_density, plot_output=self.plot_output,
+                       y_range=self.y_range)
             
             # Update status
             self.status_html.value = f"Generated {end_index} / {n_total} samples"
@@ -1031,7 +1055,8 @@ class ChangeOfDensityVisualization:
         
         # Final update
         update_plot(self.current_X_samples, dist_type, func_type, dist_params, func_params,
-                   show_density=self.show_density, plot_output=self.plot_output)
+                   show_density=self.show_density, plot_output=self.plot_output,
+                   y_range=self.y_range)
         self.status_html.value = f"Complete! Generated {n_total} samples."
         
         # Enable the buttons now that samples are available
@@ -1070,7 +1095,7 @@ class ChangeOfDensityVisualization:
             # Update plot showing Y samples
             update_plot(self.current_X_samples, dist_type, func_type, dist_params, func_params,
                        Y_samples=Y_visible, show_Y=True, show_density=self.show_density, 
-                       plot_output=self.plot_output)
+                       plot_output=self.plot_output, y_range=self.y_range)
             
             # Update status
             self.status_html.value = f"Transformed {end_index} / {n_total} samples"
@@ -1088,7 +1113,7 @@ class ChangeOfDensityVisualization:
         # Final update
         update_plot(self.current_X_samples, dist_type, func_type, dist_params, func_params,
                    Y_samples=self.current_Y_samples, show_Y=True, show_density=self.show_density,
-                   plot_output=self.plot_output)
+                   plot_output=self.plot_output, y_range=self.y_range)
         self.status_html.value = f"Complete! Transformed {n_total} samples."
     
     def _on_show_density_clicked(self, button):
@@ -1107,6 +1132,20 @@ class ChangeOfDensityVisualization:
         # Update the plot
         self._update_function_plot()
     
+    def _on_fit_y_clicked(self, button):
+        """Handle the Fit/Unfit Y-axis button click - toggle between a y-axis fit to all of g(x)
+        and the default square [0, 1] view. A fitted range stays fixed while sliders move."""
+        if self.y_range is None:
+            Y_samples = self.current_Y_samples if len(self.current_Y_samples) > 0 else None
+            self.y_range = compute_fit_y_range(self.func_dropdown.value, self._get_func_params(), Y_samples)
+            self.fit_y_button.description = 'Unfit Y-axis'
+            self.status_html.value = f"Y-axis fit to [{self.y_range[0]:.2f}, {self.y_range[1]:.2f}]"
+        else:
+            self.y_range = None
+            self.fit_y_button.description = 'Fit Y-axis'
+            self.status_html.value = "Y-axis reset to [0, 1]"
+        self._update_function_plot()
+
     def display(self):
         """Display the complete interface"""
         # Layout the interface
@@ -1129,7 +1168,7 @@ class ChangeOfDensityVisualization:
         
         bottom_panel = widgets.VBox([
             self.n_samples_slider,
-            widgets.HBox([self.draw_samples_button, self.transform_button, self.show_density_button]),
+            widgets.HBox([self.draw_samples_button, self.transform_button, self.show_density_button, self.fit_y_button]),
             self.status_html
         ])
         
