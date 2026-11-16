@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set Explorer — A Deck of Cards</title>
+<style>
+  :root {
+    --bg: #f5f4f0; --panel: #fff; --ink: #1f2328; --muted: #6a6f76; --line: #dcdcd6;
+    --red: #c8102e; --black: #1f2328;
+    --cw: 60px;   /* width of one card cell; shrunk by fitGrid() when space is tight */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink);
+         border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  header { padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+
+  .app { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start; }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar { flex: 0 0 330px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  @media (max-width: 900px) { #sidebar { flex-basis: 100%; } }
+  .btnrow { display: flex; gap: 8px; }
+  .btnrow button { flex: 1; }
+  #list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 620px; padding: 2px 4px 12px 2px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; background: #fff; }
+
+  button { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid #b9bbbe; background: #fff;
+           border-radius: 6px; cursor: pointer; color: var(--ink); }
+  button:hover:not(:disabled) { background: #f0f0ec; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: #2b59c3; color: #fff; border-color: #2b59c3; }
+  button.primary:hover:not(:disabled) { background: #234aa3; }
+  button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.big { padding: 9px 10px; font-weight: 600; }
+
+  .item { background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--c);
+          border-radius: 8px; flex: none; }
+  .item.open { box-shadow: 0 0 0 2px var(--c), 0 6px 18px rgba(0,0,0,.12); }
+  .item-head { display: flex; align-items: center; gap: 8px; padding: 8px 6px 8px 10px; cursor: pointer; user-select: none; }
+  .item-head:hover { background: #fafaf7; }
+  .badge { min-width: 28px; height: 28px; padding: 0 5px; border-radius: 6px; background: var(--c); color: #fff;
+           font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; font-size: 14px; }
+  .head-text { flex: 1; min-width: 0; font-size: 13px; }
+  .head-text .def { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head-text .n { color: var(--muted); font-size: 11.5px; }
+  .chev { color: #999; font-size: 11px; }
+  .x { border: none; background: none; font-size: 19px; line-height: 1; padding: 0 6px; color: #999; }
+  .x:hover:not(:disabled) { color: #c00; background: none; }
+
+  .body { padding: 10px; border-top: 1px solid var(--line); font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .part { background: #f8f8f5; border: 1px solid #ecebe6; border-radius: 6px; padding: 8px; }
+  .part h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  select { font: inherit; font-size: 13px; padding: 4px; width: 100%; border-radius: 5px; border: 1px solid #b9bbbe; background: #fff; color: var(--ink); }
+  .checks { margin-top: 6px; }
+  .checks label { display: flex; align-items: center; gap: 5px; margin: 3px 0; cursor: pointer; }
+  .valchecks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 4px; }
+  .mini { display: flex; gap: 4px; margin-top: 4px; }
+  .mini button { padding: 1px 6px; font-size: 11px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; font-style: italic; }
+  .red { color: var(--red); }
+  .slider { margin-top: 8px; }
+  .slider label { display: block; font-size: 12px; }
+  .slider input { width: 100%; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions .primary { margin-left: auto; }
+  .count { font-size: 12px; color: var(--muted); }
+  .field label, .combo-grid label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 3px; }
+  .combo-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .preview { font-size: 16px; font-weight: 600; padding: 6px 8px; background: #f8f8f5; border-radius: 6px; text-align: center; }
+
+  /* ---------- Board ---------- */
+  .main { flex: 1 1 520px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; min-width: 0; }
+  #board { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; max-width: 100%; }
+  #status { font-size: 14px; min-height: 22px; margin-bottom: 8px; }
+  #status .muted { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 64px repeat(13, var(--cw)); }
+  .colhead { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); padding-bottom: 4px; }
+  .rowhead { display: flex; flex-direction: column; justify-content: center; font-size: 12px; color: var(--muted); padding-right: 6px; }
+  .rowhead .sym { font-size: 22px; line-height: 1; }
+  .cell { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); }
+  .layer { position: absolute; pointer-events: none; transition: background .15s; }
+  .card { position: absolute; left: 13.3%; top: 11.9%; width: 73.4%; height: 76.2%; z-index: 100;
+          background: #fff; border: 1px solid #a9abae; border-radius: 5px; box-shadow: 0 1px 2px rgba(0,0,0,.15);
+          transition: filter .2s, opacity .2s; }
+  .card .r { position: absolute; left: 9%; top: 2px; font-size: calc(var(--cw) * .2); font-weight: 700; line-height: 1.1; text-align: center; }
+  .card .r small { display: block; font-size: calc(var(--cw) * .167); }
+  .card .c { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .4); padding-top: 12%; }
+  .card.redc { color: var(--red); } .card.blackc { color: var(--black); }
+  .card.dim { filter: grayscale(1) contrast(.6); opacity: .33; }
+
+  #legend { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px; flex: 1 1 230px; max-width: 100%; font-size: 13px; }
+  #legend h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .lg { display: flex; gap: 8px; align-items: flex-start; padding: 5px 4px; border-radius: 6px; cursor: default; }
+  .lg:hover { background: #f5f5f1; }
+  .lg.focus { background: #f0f0ea; }
+  .sw { width: 22px; height: 22px; border-radius: 5px; flex: none; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 12px; }
+  .lg .t { min-width: 0; }
+  .lg .t .d { color: var(--ink); word-break: break-word; }
+  .lg .t .n { color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Set Explorer: events in a deck of 52 cards</h1>
+  <p>Define sets of cards by suit and value, take complements, and combine sets with <b>and / or / not</b> or with <b>∩ / ∪ / ᶜ</b>. Hover over a set in the list to highlight it.</p>
+</header>
+
+<div class="app">
+  <aside id="sidebar">
+    <div class="btnrow">
+      <button class="big" id="newSet">＋ Create a new set</button>
+      <button class="big" id="combine">⊕ Combine sets</button>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <div class="main">
+    <div id="board">
+      <div id="status"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div id="legend"></div>
+  </div>
+</div>
+
+<script>
+/* ======================= Data ======================= */
+const SUITS = [
+  { sym: '♦', name: 'Diamonds', red: true },
+  { sym: '♥︎', name: 'Hearts',   red: true },
+  { sym: '♣', name: 'Clubs',    red: false },
+  { sym: '♠', name: 'Spades',   red: false },
+];
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const PALETTE = ['#e03131','#1c7ed6','#2f9e44','#f08c00','#9c36b5','#0c8599','#d6336c','#5f3dc4','#66a80f','#e8590c'];
+const DRAFT_COLOR = '#495057';
+
+let sets = [];          // ordered list of set objects
+let nextId = 1;
+let expandedId = null;  // the set whose editor is open (only one at a time)
+let hoverId = null;     // the set currently hovered in the list / legend
+
+const $ = sel => document.querySelector(sel);
+const byId = id => sets.find(s => s.id === id);
+const labelFor = n => { const L = String.fromCharCode(65 + n % 26); const k = Math.floor(n / 26); return k ? L + k : L; };
+const freeLabelIdx = () => { let n = 0; while (sets.some(s => s.label === labelFor(n))) n++; return n; };
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+const not = m => m.map(x => !x);
+
+/* ======================= Membership ======================= */
+// Returns a boolean array of length 52 (index = suit*13 + value-1), or null if the set is not fully defined.
+function members(s) {
+  if (!s) return null;
+  let m;
+  if (s.type === 'basic') {
+    m = [];
+    for (let si = 0; si < 4; si++) for (let v = 1; v <= 13; v++) {
+      let ok = true;
+      if (s.suitMode === 'explicit') ok = ok && s.suits[si];
+      else if (s.suitMode === 'implicit') ok = ok && (SUITS[si].red === (s.suitColor === 'red'));
+      if (s.valueMode === 'explicit') ok = ok && s.values[v - 1];
+      else if (s.valueMode === 'implicit') ok = ok && v >= s.lo && v <= s.hi;
+      m.push(ok);
+    }
+  } else {
+    const A = opMembers(s.a), B = opMembers(s.b);
+    if (!A || !B || !s.op) return null;
+    m = A.map((x, i) => s.op === 'and' ? (x && B[i]) : (x || B[i]));
+  }
+  return s.comp ? not(m) : m;
+}
+function opMembers(op) {
+  if (!op) return null;
+  const m = members(byId(op.id));
+  if (!m) return null;
+  return op.neg ? not(m) : m;
+}
+const countOf = m => m ? m.filter(Boolean).length : null;
+
+/* ======================= Text ======================= */
+function notL(L, notation) { return notation === 'set' ? L + 'ᶜ' : `(not ${L})`; }
+function opStr(op, notation) { const t = byId(op.id); return op.neg ? notL(t.label, notation) : t.label; }
+function connStr(op, notation) { return notation === 'set' ? (op === 'and' ? '∩' : '∪') : op; }
+function comboExpr(c) {
+  if (!c.notation) return 'choose how to combine…';
+  const a = c.a ? opStr(c.a, c.notation) : '?';
+  const b = c.b ? opStr(c.b, c.notation) : '?';
+  const o = c.op ? connStr(c.op, c.notation) : '?';
+  let e = `${a} ${o} ${b}`;
+  if (c.comp) e = c.notation === 'set' ? `(${e})ᶜ` : `not (${e})`;
+  return e;
+}
+function basicDef(s) {
+  const parts = [];
+  if (s.suitMode === 'explicit') {
+    const ch = SUITS.filter((_, i) => s.suits[i]).map(u => u.sym);
+    parts.push(ch.length === 4 ? 'any suit' : ch.length ? `suit ∈ {${ch.join(', ')}}` : 'suit ∈ ∅');
+  } else if (s.suitMode === 'implicit') parts.push(`${s.suitColor} suit`);
+  if (s.valueMode === 'explicit') {
+    const ch = RANKS.filter((_, i) => s.values[i]);
+    parts.push(ch.length === 13 ? 'any value' : ch.length ? `value ∈ {${ch.join(', ')}}` : 'value ∈ ∅');
+  } else if (s.valueMode === 'implicit') {
+    parts.push(s.lo === s.hi ? `value = ${RANKS[s.lo - 1]}` : `${RANKS[s.lo - 1]} ≤ value ≤ ${RANKS[s.hi - 1]}`);
+  }
+  let d = parts.length ? parts.join(' and ') : 'all cards (no restriction yet)';
+  if (s.comp) d = `not (${d})`;
+  return d;
+}
+function defOf(s) { return s.type === 'basic' ? basicDef(s) : `= ${comboExpr(s)}`; }
+function countText(m) {
+  const n = countOf(m);
+  if (n == null) return 'not fully defined yet';
+  return `${n} card${n === 1 ? '' : 's'} · P = ${n}/52 ≈ ${(n / 52).toFixed(3)}`;
+}
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+/* ======================= Grid ======================= */
+const cells = [];
+function buildGrid() {
+  const g = $('#grid');
+  g.appendChild(document.createElement('div'));
+  RANKS.forEach(r => { const d = document.createElement('div'); d.className = 'colhead'; d.textContent = r; g.appendChild(d); });
+  SUITS.forEach((u, si) => {
+    const h = document.createElement('div');
+    h.className = 'rowhead';
+    h.innerHTML = `<span class="sym ${u.red ? 'red' : ''}">${u.sym}</span><span>${u.name}</span>`;
+    g.appendChild(h);
+    RANKS.forEach((r, vi) => {
+      const cell = document.createElement('div'); cell.className = 'cell';
+      const layers = document.createElement('div');
+      const card = document.createElement('div');
+      card.className = 'card ' + (u.red ? 'redc' : 'blackc');
+      card.title = `${r} of ${u.name}`;
+      card.innerHTML = `<div class="r">${r}<small>${u.sym}</small></div><div class="c">${u.sym}</div>`;
+      cell.append(layers, card);
+      g.appendChild(cell);
+      cells[si * 13 + vi] = { layers, card };
+    });
+  });
+}
+
+// Decide what to draw: which set(s) are "in focus" and which are shown faintly in the background.
+function computeView() {
+  const background = [], focus = [];
+  let primary = null, ctx = null, hovering = false;
+  const skip = new Set();
+  if (hoverId != null && hoverId !== expandedId) { ctx = byId(hoverId); hovering = true; }
+  else if (expandedId != null) ctx = byId(expandedId);
+
+  if (ctx) {
+    skip.add(ctx.id);
+    if (ctx.type === 'combo' && !hovering) {
+      // Show both operand sets (with their complements applied) plus the result.
+      [ctx.a, ctx.b].forEach((op, k) => {
+        if (!op) return;
+        const m = opMembers(op); if (!m) return;
+        const t = byId(op.id); skip.add(t.id);
+        focus.push({ m, color: t.color, inset: k ? 6 : 3, bw: 2, alpha: .2, bAlpha: 1, dash: k === 1 && ctx.a && ctx.b && ctx.a.id === ctx.b.id });
+      });
+      const m = members(ctx);
+      if (m) { focus.push({ m, color: ctx.color, inset: 0, bw: 3, alpha: .1, bAlpha: 1, dash: true }); primary = m; }
+      else if (focus.length) primary = focus.map(f => f.m).reduce((a, b) => a.map((x, i) => x || b[i]));
+    } else {
+      const m = members(ctx);
+      if (m) { focus.push({ m, color: ctx.color, inset: 2, bw: 3, alpha: .3, bAlpha: 1 }); primary = m; }
+    }
+  }
+  let k = 0;
+  for (const s of sets) {
+    if (s.draft || skip.has(s.id)) continue;
+    const m = members(s); if (!m) continue;
+    background.push({ m, color: s.color, inset: 1 + (k % 4) * 2, bw: 1, alpha: .1, bAlpha: .6 });
+    k++;
+  }
+  return { layers: [...background, ...focus], primary, ctx, hovering, skip };
+}
+
+function drawLayer(i, L, z) {
+  const si = Math.floor(i / 13), vi = i % 13, m = L.m;
+  const up = si > 0 && m[i - 13], dn = si < 3 && m[i + 13], lf = vi > 0 && m[i - 1], rt = vi < 12 && m[i + 1];
+  const b = `${L.bw}px ${L.dash ? 'dashed' : 'solid'} ${rgba(L.color, L.bAlpha)}`;
+  const d = document.createElement('div');
+  d.className = 'layer';
+  const ins = L.inset + 'px', r = '9px';
+  Object.assign(d.style, {
+    top: up ? '0' : ins, bottom: dn ? '0' : ins, left: lf ? '0' : ins, right: rt ? '0' : ins,
+    background: rgba(L.color, L.alpha),
+    borderTop: up ? 'none' : b, borderBottom: dn ? 'none' : b, borderLeft: lf ? 'none' : b, borderRight: rt ? 'none' : b,
+    borderTopLeftRadius: (!up && !lf) ? r : '0', borderTopRightRadius: (!up && !rt) ? r : '0',
+    borderBottomLeftRadius: (!dn && !lf) ? r : '0', borderBottomRightRadius: (!dn && !rt) ? r : '0',
+    zIndex: z,
+  });
+  cells[i].layers.appendChild(d);
+}
+
+function renderGrid() {
+  const view = computeView();
+  cells.forEach(c => c.layers.innerHTML = '');
+  view.layers.forEach((L, z) => { for (let i = 0; i < 52; i++) if (L.m[i]) drawLayer(i, L, z + 1); });
+  cells.forEach((c, i) => c.card.classList.toggle('dim', !!view.primary && !view.primary[i]));
+  renderStatus(view);
+  renderLegend(view);
+}
+
+function renderStatus(view) {
+  const s = view.ctx, el = $('#status');
+  if (!s) { el.innerHTML = `<span class="muted">${sets.length ? 'Open or hover over a set to focus on it.' : 'Create a set to get started.'}</span>`; return; }
+  const name = s.draft ? 'New set' : s.label;
+  el.innerHTML = `<b style="color:${s.color}">${esc(name)}</b> ${esc(s.type === 'basic' ? ': ' + basicDef(s) : '= ' + comboExpr(s))}
+                  &nbsp;<span class="muted">— ${countText(members(s))}</span>`;
+}
+
+let legendHTML = '';
+function renderLegend(view) {
+  const shown = sets.filter(s => !s.draft || s.id === expandedId);
+  let h = '<h3>Legend</h3>';
+  if (!shown.length) h += '<div class="count">No sets yet.</div>';
+  for (const s of shown) {
+    const isFocus = view.ctx && (view.skip.has(s.id));
+    h += `<div class="lg ${isFocus ? 'focus' : ''}" data-id="${s.id}">
+      <div class="sw" style="background:${rgba(s.color, .18)};border:2px solid ${s.color};color:${s.color}">${s.label ? esc(s.label) : '?'}</div>
+      <div class="t"><div class="d">${s.draft ? 'New set ' : ''}${esc(defOf(s))}</div><div class="n">${countText(members(s))}</div></div></div>`;
+  }
+  if (h === legendHTML) return;   // avoid re-building under the mouse when nothing changed
+  legendHTML = h;
+  const lg = $('#legend');
+  lg.innerHTML = h;
+  lg.querySelectorAll('.lg').forEach(el => {
+    const id = +el.dataset.id;
+    el.addEventListener('mouseenter', () => { hoverId = id; renderGrid(); });
+    el.addEventListener('mouseleave', () => { if (hoverId === id) { hoverId = null; renderGrid(); } });
+  });
+}
+
+/* ======================= Set list / editors ======================= */
+function sel(f, val, opts, extra = '') {
+  return `<select data-f="${f}" ${extra}>${opts.map(([v, t]) =>
+    `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+}
+const MODE_OPTS = [['', 'Choose…'], ['explicit', 'Explicit'], ['implicit', 'Implicit']];
+
+function basicBody(s) {
+  let suit = sel('suitMode', s.suitMode, MODE_OPTS);
+  if (s.suitMode === 'explicit') {
+    suit += `<div class="checks">${SUITS.map((u, i) =>
+      `<label><input type="checkbox" data-f="suit" data-i="${i}" ${s.suits[i] ? 'checked' : ''}>
+       <span class="${u.red ? 'red' : ''}">${u.sym}</span> ${u.name}</label>`).join('')}</div>
+       <div class="mini"><button data-act="suitAll">all</button><button data-act="suitNone">none</button></div>`;
+  } else if (s.suitMode === 'implicit') {
+    suit += `<div class="checks">
+      <label><input type="radio" name="sc${s.id}" data-f="suitColor" value="red" ${s.suitColor === 'red' ? 'checked' : ''}> Red <span class="red">♦ ♥&#xFE0E;</span></label>
+      <label><input type="radio" name="sc${s.id}" data-f="suitColor" value="black" ${s.suitColor === 'black' ? 'checked' : ''}> Black ♣ ♠</label></div>`;
+  } else suit += `<div class="hint">No restriction on suit yet.</div>`;
+
+  let val = sel('valueMode', s.valueMode, MODE_OPTS);
+  if (s.valueMode === 'explicit') {
+    val += `<div class="checks valchecks">${RANKS.map((r, i) =>
+      `<label><input type="checkbox" data-f="val" data-i="${i}" ${s.values[i] ? 'checked' : ''}>${r}</label>`).join('')}</div>
+      <div class="mini"><button data-act="valAll">all</button><button data-act="valNone">none</button></div>`;
+  } else if (s.valueMode === 'implicit') {
+    val += `<div class="slider"><label>Lower bound: <b data-out="lo">${RANKS[s.lo - 1]}</b></label>
+              <input type="range" min="1" max="13" step="1" value="${s.lo}" data-f="lo"></div>
+            <div class="slider"><label>Upper bound: <b data-out="hi">${RANKS[s.hi - 1]}</b></label>
+              <input type="range" min="1" max="13" step="1" value="${s.hi}" data-f="hi"></div>
+            <div class="hint">A = 1, J = 11, Q = 12, K = 13</div>`;
+  } else val += `<div class="hint">No restriction on value yet.</div>`;
+
+  return `<div class="two"><div class="part"><h4>Suit</h4>${suit}</div><div class="part"><h4>Value</h4>${val}</div></div>
+    <div class="count" data-count></div>
+    <div class="actions">
+      <button data-act="comp" class="${s.comp ? 'on' : ''}">${s.comp ? '✓ Complement (switch back)' : 'Switch to complement'}</button>
+      <button class="primary" data-act="done">Done</button>
+    </div>`;
+}
+
+function comboBody(c) {
+  let h = `<div class="field"><label>Combine using</label>${sel('notation', c.notation,
+    [['', 'Choose…'], ['logic', 'Logic  (and, or, not)'], ['set', 'Set theory  (∩, ∪, ᶜ)']])}</div>`;
+  if (!c.notation) return h;
+  const idx = sets.indexOf(c);
+  // Only sets created before this one can be used (prevents circular definitions).
+  const elig = sets.filter((s, i) => !s.draft && s !== c && (c.draft || i < idx));
+  if (!elig.length) return h + `<div class="hint">Create at least one set first, then come back to combine.</div>`;
+  const opts = [['', 'Choose…']];
+  for (const s of elig) { opts.push([`${s.id}:0`, s.label]); opts.push([`${s.id}:1`, notL(s.label, c.notation)]); }
+  const v = op => op ? `${op.id}:${op.neg ? 1 : 0}` : '';
+  const isSet = c.notation === 'set';
+  h += `<div class="combo-grid">
+      <div><label>Set 1</label>${sel('a', v(c.a), opts)}</div>
+      <div><label>${isSet ? 'Operation' : 'Connective'}</label>${sel('op', c.op, [['', 'Choose…'], ['and', isSet ? '∩' : 'and'], ['or', isSet ? '∪' : 'or']])}</div>
+      <div><label>Set 2</label>${sel('b', v(c.b), opts)}</div>
+    </div>
+    <div class="preview" data-preview></div>
+    <div class="count" data-count></div>`;
+  const complete = !!(c.a && c.b && c.op);
+  h += `<div class="actions">
+      <button data-act="comp" class="${c.comp ? 'on' : ''}" ${complete ? '' : 'disabled'}>${c.comp ? '✓ Complement (switch back)' : 'Switch to complement'}</button>
+      ${c.draft
+        ? `<button class="primary" data-act="add" ${complete ? '' : 'disabled'}>Add to list of sets</button>`
+        : `<button class="primary" data-act="done">Done</button>`}
+    </div>`;
+  return h;
+}
+
+function headText(s) {
+  if (s.draft) return `<div class="def"><b>New combination</b></div><div class="n">${esc(comboExpr(s))}</div>`;
+  return `<div class="def">${esc(defOf(s))}</div><div class="n">${countText(members(s))}</div>`;
+}
+
+function renderList() {
+  const list = $('#list');
+  list.innerHTML = '';
+  if (!sets.length) list.innerHTML = `<div class="empty">No sets yet. Click <b>Create a new set</b> to define your first event.</div>`;
+  for (const s of sets) {
+    const open = s.id === expandedId;
+    const el = document.createElement('div');
+    el.className = 'item' + (open ? ' open' : '');
+    el.dataset.id = s.id;
+    el.style.setProperty('--c', s.color);
+    el.innerHTML = `<div class="item-head" title="${open ? 'Collapse' : 'Click to edit'}">
+        <div class="badge">${s.label ? esc(s.label) : '?'}</div>
+        <div class="head-text"></div>
+        <span class="chev">${open ? '▾' : '▸'}</span>
+        <button class="x" data-act="del" title="Delete this set">×</button>
+      </div>` + (open ? `<div class="body">${s.type === 'basic' ? basicBody(s) : comboBody(s)}</div>` : '');
+    const head = el.querySelector('.item-head');
+    head.addEventListener('mouseenter', () => { hoverId = s.id; renderGrid(); });
+    head.addEventListener('mouseleave', () => { if (hoverId === s.id) { hoverId = null; renderGrid(); } });
+    list.appendChild(el);
+  }
+  updateTexts();
+}
+
+// Update the text bits (definitions, counts, previews) without rebuilding the editors.
+function updateTexts() {
+  document.querySelectorAll('#list .item').forEach(el => {
+    const s = byId(+el.dataset.id); if (!s) return;
+    el.querySelector('.head-text').innerHTML = headText(s);
+    const c = el.querySelector('[data-count]');
+    if (c) c.textContent = (s.draft ? 'New set: ' : `${s.label}: `) + countText(members(s));
+    const p = el.querySelector('[data-preview]');
+    if (p) p.textContent = `${s.draft ? 'New set' : s.label} = ${comboExpr(s)}`;
+  });
+}
+
+function renderAll() { renderList(); renderGrid(); }
+
+/* ======================= Actions ======================= */
+function newBasic() {
+  const n = freeLabelIdx();
+  const s = { id: nextId++, type: 'basic', label: labelFor(n), color: PALETTE[n % PALETTE.length],
+              suitMode: '', suits: [false, false, false, false], suitColor: 'red',
+              valueMode: '', values: Array(13).fill(false), lo: 1, hi: 13, comp: false };
+  sets.push(s); expandedId = s.id; hoverId = null;
+  renderAll(); scrollToItem(s.id);
+}
+function newCombo() {
+  const c = { id: nextId++, type: 'combo', draft: true, label: null, color: DRAFT_COLOR,
+              notation: '', a: null, b: null, op: '', comp: false };
+  sets.push(c); expandedId = c.id; hoverId = null;
+  renderAll(); scrollToItem(c.id);
+}
+function addCombo(c) {
+  const n = freeLabelIdx();
+  c.draft = false; c.label = labelFor(n); c.color = PALETTE[n % PALETTE.length];
+  sets = sets.filter(s => s !== c); sets.push(c);   // move to end so its operands come before it
+  expandedId = null; renderAll();
+}
+function deleteSet(id) {
+  const doomed = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const s of sets) if (s.type === 'combo' && !s.draft && !doomed.has(s.id) &&
+        ((s.a && doomed.has(s.a.id)) || (s.b && doomed.has(s.b.id)))) { doomed.add(s.id); changed = true; }
+  }
+  if (doomed.size > 1) {
+    const deps = [...doomed].filter(x => x !== id).map(x => byId(x).label).join(', ');
+    if (!confirm(`Set ${byId(id).label} is used to build ${deps}.\nDeleting it will also delete ${deps}. Continue?`)) return;
+  }
+  sets = sets.filter(s => !doomed.has(s.id));
+  for (const s of sets) if (s.type === 'combo') {
+    if (s.a && doomed.has(s.a.id)) s.a = null;
+    if (s.b && doomed.has(s.b.id)) s.b = null;
+  }
+  if (doomed.has(expandedId)) expandedId = null;
+  if (doomed.has(hoverId)) hoverId = null;
+  renderAll();
+}
+// Scroll within the set list only, so the surrounding page doesn't jump when embedded.
+function scrollToItem(id) {
+  const el = document.querySelector(`#list .item[data-id="${id}"]`), list = $('#list');
+  if (el) list.scrollTo({ top: el.offsetTop - list.offsetTop, behavior: 'smooth' });
+}
+const parseOp = v => v ? { id: +v.split(':')[0], neg: v.split(':')[1] === '1' } : null;
+
+$('#newSet').addEventListener('click', newBasic);
+$('#combine').addEventListener('click', newCombo);
+
+const list = $('#list');
+list.addEventListener('click', e => {
+  const item = e.target.closest('.item'); if (!item) return;
+  const s = byId(+item.dataset.id); if (!s) return;
+  const actEl = e.target.closest('[data-act]');
+  const act = actEl && !actEl.disabled ? actEl.dataset.act : null;
+  if (act === 'del') { e.stopPropagation(); deleteSet(s.id); return; }
+  if (act) {
+    if (act === 'comp') s.comp = !s.comp;
+    if (act === 'done') expandedId = null;
+    if (act === 'add') { addCombo(s); return; }
+    if (act === 'suitAll' || act === 'suitNone') s.suits = s.suits.map(() => act === 'suitAll');
+    if (act === 'valAll' || act === 'valNone') s.values = s.values.map(() => act === 'valAll');
+    renderAll(); return;
+  }
+  if (e.target.closest('.item-head')) {
+    expandedId = expandedId === s.id ? null : s.id;
+    hoverId = null;
+    renderAll();
+  }
+});
+
+// Sliders: update live while dragging, without rebuilding the editor.
+list.addEventListener('input', e => {
+  const f = e.target.dataset.f; if (f !== 'lo' && f !== 'hi') return;
+  const item = e.target.closest('.item'); const s = byId(+item.dataset.id);
+  const v = +e.target.value;
+  if (f === 'lo') { s.lo = v; if (s.hi < v) s.hi = v; } else { s.hi = v; if (s.lo > v) s.lo = v; }
+  item.querySelector('[data-f="lo"]').value = s.lo;
+  item.querySelector('[data-f="hi"]').value = s.hi;
+  item.querySelector('[data-out="lo"]').textContent = RANKS[s.lo - 1];
+  item.querySelector('[data-out="hi"]').textContent = RANKS[s.hi - 1];
+  updateTexts(); renderGrid();
+});
+
+list.addEventListener('change', e => {
+  const t = e.target, f = t.dataset.f; if (!f || f === 'lo' || f === 'hi') return;
+  const s = byId(+t.closest('.item').dataset.id);
+  if (f === 'suit') { s.suits[+t.dataset.i] = t.checked; updateTexts(); renderGrid(); return; }
+  if (f === 'val')  { s.values[+t.dataset.i] = t.checked; updateTexts(); renderGrid(); return; }
+  if (f === 'suitColor') { s.suitColor = t.value; updateTexts(); renderGrid(); return; }
+  if (f === 'a' || f === 'b') s[f] = parseOp(t.value);
+  else s[f] = t.value;              // suitMode, valueMode, notation, op
+  if (s.type === 'combo' && !(s.a && s.b && s.op)) s.comp = false;
+  renderAll();
+});
+
+/* ======================= Embedding ======================= */
+// Shrink the card cells so the board fits the available width (cells are 60px at full size).
+function fitGrid() {
+  const avail = $('.main').clientWidth - 64 - 30;   // row labels + board padding/border
+  const cw = Math.max(34, Math.min(60, Math.floor(avail / 13)));
+  document.documentElement.style.setProperty('--cw', cw + 'px');
+}
+// When embedded in an iframe (e.g. in the course notes), grow the frame to fit the content.
+function fitFrame() {
+  try {
+    const f = window.frameElement;
+    if (f) f.style.height = Math.ceil(document.body.getBoundingClientRect().height) + 'px';
+  } catch (e) { /* cross-origin parent: keep the frame's default height */ }
+}
+new ResizeObserver(fitGrid).observe(document.querySelector('.app'));
+new ResizeObserver(fitFrame).observe(document.body);
+
+buildGrid();
+fitGrid();
+renderAll();
+</script>
+</body>
+</html>
