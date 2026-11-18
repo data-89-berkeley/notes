@@ -216,7 +216,7 @@ function defOf(s) { return s.type === 'basic' ? basicDef(s) : `= ${comboExpr(s)}
 function countText(m) {
   const n = countOf(m);
   if (n == null) return 'not fully defined yet';
-  return `${n} card${n === 1 ? '' : 's'} · P = ${n}/52 ≈ ${(n / 52).toFixed(3)}`;
+  return `${n} of 52 card${n === 1 ? '' : 's'}`;
 }
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
