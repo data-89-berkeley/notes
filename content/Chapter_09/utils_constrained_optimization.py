@@ -12,13 +12,20 @@ package. Without it the demo still runs, and the point is placed with sliders.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable, Optional
 
 import ipywidgets as widgets
 import numpy as np
 import plotly.graph_objects as go
 from IPython.display import clear_output, display
-from matplotlib.figure import Figure
+
+try:
+    # Ships with matplotlib 3.6+, and traces contours about 10x faster than a figure.
+    import contourpy
+except ImportError:
+    contourpy = None
+    from matplotlib.figure import Figure
 
 
 # Colors: everything about f is blue, everything about g is orange.
@@ -50,6 +57,7 @@ F_TANGENT_HALF_LENGTH, G_TANGENT_HALF_LENGTH = 0.8, 0.45
 QUIVER_POINTS = 13
 RANDOM = "Random"
 RANDOM_ATTEMPTS = 60
+LEVEL_SCAN_STEP = 0.1  # spacing of the levels tested when bounding the level slider
 
 ScalarField = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -165,9 +173,11 @@ def level_curves(z_grid: np.ndarray, level: float) -> list[np.ndarray]:
     z_min, z_max = float(z_grid.min()), float(z_grid.max())
     if not z_min < level < z_max:
         return []
-    axes = Figure().add_subplot()
-    segments = axes.contour(GRID, GRID, z_grid, levels=[level]).allsegs[0]
-    return [np.asarray(s) for s in segments if len(s) > 1]
+    if contourpy is not None:
+        segments = contourpy.contour_generator(GRID, GRID, z_grid).lines(level)
+    else:
+        segments = Figure().add_subplot().contour(GRID, GRID, z_grid, levels=[level]).allsegs[0]
+    return [np.asarray(s, dtype=float) for s in segments if len(s) > 1]
 
 
 def _drop_repeated_vertices(curve: np.ndarray) -> np.ndarray:
@@ -229,18 +239,69 @@ def constrained_maxima(f: ScalarField, curves: list[np.ndarray]) -> list[np.ndar
     return maxima
 
 
+def _values_on_curves(f: ScalarField, curves: list[np.ndarray]) -> np.ndarray:
+    samples = np.vstack(curves)
+    return f(samples[:, 0], samples[:, 1])
+
+
+def maximum_on_window_edge(f: ScalarField, curves: list[np.ndarray]) -> bool:
+    """
+    True when the highest value of f on X within the window sits on the window's
+    edge rather than at a maximum inside it. The window then acts as an extra
+    constraint, and the point the plot suggests is not a true constrained maximum.
+    """
+    if not curves:
+        return False
+    values = _values_on_curves(f, curves)
+    spread = float(values.max() - values.min())
+    if spread < 1e-6:
+        return False
+    maxima = constrained_maxima(f, curves)
+    best_inside = max((float(f(p[0], p[1])) for p in maxima), default=-np.inf)
+    return best_inside < float(values.max()) - VALUE_TOL * spread
+
+
 def has_clear_maximum(f: ScalarField, curves: list[np.ndarray]) -> bool:
     """True when the highest value of f on the curves is a maximum inside the window."""
     if not curves:
         return False
-    maxima = constrained_maxima(f, curves)
-    if not maxima:
-        return False
-    best = max(float(f(p[0], p[1])) for p in maxima)
-    samples = np.vstack(curves)
-    values = f(samples[:, 0], samples[:, 1])
+    values = _values_on_curves(f, curves)
     spread = float(values.max() - values.min())
-    return spread > 1e-6 and best >= float(values.max()) - VALUE_TOL * spread
+    return spread > 1e-6 and not maximum_on_window_edge(f, curves)
+
+
+def problem_is_usable(f: ScalarField, g: ScalarField, level: float) -> bool:
+    """
+    True when X is non-empty in the window and the maximum of f on X is not on
+    the window's edge. Unlike has_clear_maximum, this allows f constant on X,
+    where every point of X is a maximum.
+    """
+    curves = constraint_curves(g, level)
+    return bool(curves) and not maximum_on_window_edge(f, curves)
+
+
+@lru_cache(maxsize=None)
+def named_pair_usable(f_name: str, g_name: str) -> bool:
+    """Whether a dropdown pair works at level 0, where every new problem starts."""
+    return problem_is_usable(F_FUNCTIONS[f_name], G_FUNCTIONS[g_name], 0.0)
+
+
+def usable_level_range(f: ScalarField, g: ScalarField, z_g: np.ndarray) -> tuple[float, float]:
+    """
+    The interval of levels around 0, in steps of LEVEL_SCAN_STEP, where the
+    problem stays usable. Bounding the level slider by it means dragging can
+    never reach a problem whose maximum is on the window's edge.
+    """
+    bounds = []
+    for direction, limit in ((-1, float(z_g.min())), (1, float(z_g.max()))):
+        level = 0.0
+        while True:
+            step = round(level + direction * LEVEL_SCAN_STEP, 2)
+            if (step - limit) * direction >= 0 or not problem_is_usable(f, g, step):
+                break
+            level = step
+        bounds.append(level)
+    return bounds[0], bounds[1]
 
 
 # The "check if feasible" and "check if maximal" tests.
@@ -419,8 +480,11 @@ class ConstrainedOptimizationDemo:
         self.point = np.array([0.0, 0.0])
         self._syncing_point = False
         self._setting_level_bounds = False
+        self._filtering_constraints = False
         self._feasibility: Optional[FeasibilityResult] = None
         self._maximality: Optional[MaximalityResult] = None
+        # True while the maximum on X lies on the window's edge (see _update_blocked).
+        self._blocked = False
 
         self._create_widgets()
         self._create_figure()
@@ -446,7 +510,8 @@ class ConstrainedOptimizationDemo:
         self.new_random_button = widgets.Button(
             description="New random problem", icon="refresh", layout=widgets.Layout(width="330px"),
         )
-        # The bounds are reset to the range of g on the window whenever g changes.
+        # Each new problem resets this to 0 and bounds it to the levels where the
+        # maximum stays inside the window (see _set_level_bounds).
         self.level_slider = widgets.FloatSlider(
             value=0.0, min=-4.0, max=4.0, step=0.01, description="g level",
             readout_format=".2f", style=style, layout=wide,
@@ -539,7 +604,7 @@ class ConstrainedOptimizationDemo:
             self.x2_slider.continuous_update = False
 
     def _setup_callbacks(self):
-        self.f_dropdown.observe(self._on_function_change, names="value")
+        self.f_dropdown.observe(self._on_objective_change, names="value")
         self.g_dropdown.observe(self._on_function_change, names="value")
         self.new_random_button.on_click(self._on_new_random)
         self.level_slider.observe(self._on_level_change, names="value")
@@ -563,12 +628,15 @@ class ConstrainedOptimizationDemo:
         return draw(self.rng) if dropdown.value == RANDOM else library[dropdown.value]
 
     def _choose_functions(self):
-        """Set f and g, redrawing random choices until the problem has a clear answer."""
-        level = self.level_slider.value
+        """
+        Set f and g at level 0, redrawing random choices until the maximum of f on
+        X lies inside the window. Dropdown pairs need no redraw: the g dropdown
+        only lists constraints that work with the chosen f.
+        """
         for _ in range(RANDOM_ATTEMPTS):
             f = self._pick(self.f_dropdown, F_FUNCTIONS, random_objective)
             g = self._pick(self.g_dropdown, G_FUNCTIONS, random_constraint)
-            if has_clear_maximum(f, constraint_curves(g, level)):
+            if has_clear_maximum(f, constraint_curves(g, 0.0)):
                 break
         self.f, self.g = f, g
         self.z_f = f(X1_GRID, X2_GRID)
@@ -577,19 +645,37 @@ class ConstrainedOptimizationDemo:
         self.new_random_button.disabled = RANDOM not in (self.f_dropdown.value, self.g_dropdown.value)
 
     def _set_level_bounds(self):
-        """Match the level slider to the range of g on the window, keeping the level if it fits."""
-        low = float(np.floor(self.z_g.min() * 100) / 100)
-        high = float(np.ceil(self.z_g.max() * 100) / 100)
+        """Reset the level to 0 and limit the slider to the levels where the problem is usable."""
+        low, high = usable_level_range(self.f, self.g, self.z_g)
         slider = self.level_slider
-        # Clamping the value would fire the level observer; the caller redraws anyway.
+        # These changes would fire the level observer; the caller redraws anyway.
         self._setting_level_bounds = True
         try:
-            # Widen before narrowing, so min never passes max along the way.
+            # Every range contains 0, so moving there first keeps the value inside
+            # the bounds; widen before narrowing so min never passes max.
+            slider.value = 0.0
             slider.min = min(slider.min, low)
             slider.max = high
             slider.min = low
         finally:
             self._setting_level_bounds = False
+
+    def _filter_constraints(self):
+        """List only the constraints that give the chosen f a maximum inside the window."""
+        f_name = self.f_dropdown.value
+        names = [name for name in G_FUNCTIONS
+                 if f_name == RANDOM or named_pair_usable(f_name, name)]
+        options = [RANDOM, *names]
+        if list(self.g_dropdown.options) == options:
+            return
+        current = self.g_dropdown.value
+        self._filtering_constraints = True
+        try:
+            self.g_dropdown.options = options
+            # A constraint that no longer fits switches to Random, which redraws one that does.
+            self.g_dropdown.value = current if current in options else RANDOM
+        finally:
+            self._filtering_constraints = False
 
     # Drawing
 
@@ -627,6 +713,24 @@ class ConstrainedOptimizationDemo:
         with self.fig.batch_update():
             self.fig.data[CONSTRAINT].update(x=x_path, y=y_path)
             self._place_constraint_label()
+        self._update_blocked()
+
+    def _update_blocked(self):
+        """
+        Lock the controls below "New random problem" while the maximum of f on X
+        lies on the window's edge: that point only looks maximal because the
+        window cuts X off. f, g and the level stay usable to leave this state.
+        """
+        self._blocked = maximum_on_window_edge(self.f, self._curves)
+        for control in (self.f_levels_box, self.f_field_box, self.g_levels_box,
+                        self.g_field_box, self.x1_slider, self.x2_slider, self.feasible_button):
+            control.disabled = self._blocked
+        feasible = self._feasibility is not None and self._feasibility.feasible
+        self.maximal_button.disabled = self._blocked or not feasible
+        if self._blocked:
+            # Smaller than the check results so the longer text fits inside the plot.
+            self._set_popup("<b>Maxima Outside Display Window.<br>Generate a New Problem.</b>",
+                            "#b3261e", size=20)
 
     def _place_constraint_label(self):
         label = self.fig.layout.annotations[0]
@@ -669,9 +773,9 @@ class ConstrainedOptimizationDemo:
                 self.fig.data[index].update(x=xs, y=ys)
             self.fig.data[POINT].update(x=[self.point[0]], y=[self.point[1]])
 
-    def _set_popup(self, text: str = "", color: str = "#333333"):
+    def _set_popup(self, text: str = "", color: str = "#333333", size: int = 24):
         popup = self.fig.layout.annotations[1]
-        popup.update(text=text, visible=bool(text), bordercolor=color)
+        popup.update(text=text, visible=bool(text), bordercolor=color, font_size=size)
 
     def _clear_result(self):
         self._feasibility = None
@@ -724,7 +828,13 @@ class ConstrainedOptimizationDemo:
 
     # Callbacks
 
+    def _on_objective_change(self, change):
+        self._filter_constraints()
+        self._on_function_change(change)
+
     def _on_function_change(self, change):
+        if self._filtering_constraints:
+            return
         self._choose_functions()
         self._redraw_all()
 
@@ -760,7 +870,7 @@ class ConstrainedOptimizationDemo:
         return handler
 
     def _on_plot_click(self, trace, points, state):
-        if not points.xs:
+        if self._blocked or not points.xs:
             return
         self._move_point(points.xs[0], points.ys[0])
 
