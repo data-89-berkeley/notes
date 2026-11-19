@@ -6,6 +6,33 @@ project:
   description: "UC Berkeley Data 89: Mathematical and Graphical Foundations of Probability"
   authors: 
     - name: Alex Strang
+      affiliation: UC Berkeley
+      roles:
+      - Conceptualization
+      - Writing – original draft
+      - Writing – review & editing
+      - Supervision
+      - Project administration
+      - Visualization
+    - name: Wayland La
+      roles:
+      - Software
+    - name: Edwin Vargas
+      roles:
+      - Software
+    - name: Megana Nimmagadda
+      roles:
+      - Software
+    - name: Silas Santini
+      roles:
+      - Software
+    - name: Jia Jun Luo
+      roles:
+      - Visualization
+    - name: Tiffany Yu
+      roles:
+      - Visualization
+
   github: data-89-berkeley/notes
   license: BSD-3-Clause
   jupyter:
@@ -116,7 +143,7 @@ site:
     favicon: favicon.png
     logo: logo.png
     logo_text: Data 89 Course Notes
-    hide_authors: false
+    hide_authors: true
     hide_myst_branding: true
     hide_outline: false
   parts:
