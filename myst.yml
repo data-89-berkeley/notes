@@ -6,7 +6,6 @@ project:
   description: "UC Berkeley Data 89: Mathematical and Graphical Foundations of Probability"
   authors: 
     - name: Alex Strang
-      affiliation: UC Berkeley
       roles:
       - Conceptualization
       - Writing – original draft
