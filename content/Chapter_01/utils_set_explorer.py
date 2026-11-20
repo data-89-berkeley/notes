@@ -14,7 +14,10 @@ def show_set_explorer(height=780):
     """
     src = SET_EXPLORER_PATH.read_text(encoding="utf-8")
     return HTML(
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+        '<title>Set Explorer</title></head><body>'
         f'<div class="set-explorer"><iframe title="Set Explorer: events in a deck of 52 cards" '
         f'srcdoc="{html.escape(src, quote=True)}" '
         f'style="width: 100%; height: {height}px; border: none;"></iframe></div>'
+        '</body></html>'
     )
