@@ -140,7 +140,7 @@ site:
   template: book-theme
   options:
     favicon: favicon.png
-    logo: logo.png
+    logo: 89_logo_png.png
     logo_text: Data 89 Course Notes
     hide_authors: true
     hide_myst_branding: true
